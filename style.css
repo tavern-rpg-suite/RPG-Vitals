@@ -1,0 +1,196 @@
+@import url('https://fonts.googleapis.com/css2?family=Special+Elite&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,500;0,700;0,800;1,500&family=Caveat:wght@600&family=PT+Mono&display=swap');
+/* RPG VITALS — HP & effects, living-paper palette */
+:root {
+    --pg-bg1:#f7f1e3; --pg-bg2:#efe4cd; --pg-card:#fffaf0;
+    --pg-ink:#33312c; --pg-ink-h:#2b2924; --pg-muted:#7c7159; --pg-faint:#94886e;
+    --pg-line:#c8b98f; --pg-gold:#c9a44a; --pg-navy:#2f5d7c; --pg-navy-d:#244e6b;
+    --pg-plum:#7a3f8a; --pg-brown:#7a4a2e; --pg-brown-d:#5d4037; --pg-green:#6f9355; --pg-red:#b0432f;
+    --pg-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='pgvt'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23pgvt)' opacity='0.09'/%3E%3C/svg%3E");
+    --pg-type:'Special Elite','Courier New',Courier,monospace;
+}
+#rpg-vit-btn {
+    position: fixed; bottom: 212px; right: 20px; width: 50px; height: 50px; border-radius: 50%;
+    color: #f6efdd; font-size: 21px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+    background: linear-gradient(135deg, #8a3a2e, #5d4037); border: 2px solid var(--pg-gold);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5); transition: transform 0.2s, box-shadow 0.2s; z-index: 3000;
+}
+#rpg-vit-btn:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(201,164,74,0.55); }
+.rpg-vit-modal {
+    position: fixed; top: 52px; left: calc(50vw - 200px); width: 400px; max-width: 96%;
+    z-index: 3001; display: flex; flex-direction: column; box-sizing: border-box;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s ease-in-out;
+    background: none; border: none; border-radius: 0; box-shadow: none; color: var(--pg-ink);
+}
+.rpg-vit-modal.visible { opacity: 1; pointer-events: none; animation: pgvt-pop 0.28s ease; }
+#rpg-vit-body, #rpg-vit-body .vex-fit, #rpg-vit-body .vex { pointer-events: none; }
+.rpg-vit-modal.visible #rpg-vit-body .vex { pointer-events: auto; }
+@keyframes pgvt-pop { 0%{transform:scale(0.97);} 100%{transform:scale(1);} }
+.rpg-vit-modal .rpg-modal-header { display:none; }
+.rpg-vit-modal .rpg-modal-close { cursor:pointer; color:var(--pg-faint); padding:0 5px; transition:0.2s; }
+.rpg-vit-body { padding:22px 6px 16px; overflow-y:auto; overflow-x:hidden; max-height:calc(100vh - 64px); font-family:var(--pg-type); }
+
+.rpg-vit-hp-top { display:flex; justify-content:space-between; align-items:center; color:var(--pg-ink-h); margin-bottom:5px; }
+.rpg-vit-hp-top i { color:#a23b2e; }
+.rpg-vit-hp-num { font-size:1.05rem; }
+.rpg-vit-bar-wrap { height:20px; background:#e3d8bd; border:1px solid #cdbf9c; border-radius:10px; overflow:hidden; }
+.rpg-vit-bar { height:100%; border-radius:10px 0 0 10px; transition:width 0.35s ease, background 0.35s ease; }
+.rpg-vit-hp-ctrl { display:flex; gap:7px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+
+.rpg-vit-section { font-family:var(--pg-type); font-size:1rem; color:#4a4234; border-bottom:1px dashed var(--pg-line); padding-bottom:5px; margin:14px 0 9px; }
+.rpg-vit-note { color:var(--pg-faint); font-style:italic; font-size:0.9rem; padding:6px 2px; }
+.rpg-vit-buff { display:flex; align-items:center; gap:9px; padding:8px 10px; margin-bottom:7px; background:var(--pg-card); border:1px solid #ddcfa9; border-left:4px solid var(--pg-green); border-radius:5px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+.rpg-vit-buff.debuff { border-left-color:var(--pg-red); }
+.rpg-vit-b-main { flex:1; min-width:0; }
+.rpg-vit-b-name { color:var(--pg-ink-h); font-size:0.98rem; }
+.rpg-vit-b-eff { display:block; font-size:0.78rem; color:var(--pg-muted); font-style:italic; }
+.rpg-vit-b-dur { font-size:0.8rem; color:var(--pg-faint); background:#efe2c6; border:1px solid #cdbf9c; border-radius:10px; padding:1px 8px; }
+.rpg-vit-b-del { cursor:pointer; color:#b08; opacity:0.55; transition:0.15s; }
+.rpg-vit-b-del:hover { opacity:1; color:#8a2f26; transform:scale(1.15); }
+
+.rpg-vit-add { margin-top:10px; display:flex; flex-direction:column; gap:7px; }
+.rpg-vit-add .text_pole { width:100%; }
+.rpg-vit-add-row { display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+
+.rpg-vit-btn { font-family:var(--pg-type); font-size:0.8rem; padding:6px 11px; border-radius:5px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; transition:0.15s; border:1px solid #b6a47b; background:#efe6cf; color:#4a4234; }
+.rpg-vit-btn:hover { transform:translateY(-1px); filter:brightness(1.03); }
+.rpg-vit-btn.ok { background:var(--pg-green); border-color:#5b7d44; color:#fff; }
+.rpg-vit-btn.danger { background:#ecd6d2; border-color:#c08a82; color:#7a2f26; }
+.rpg-vit-body::-webkit-scrollbar { width:9px; }
+.rpg-vit-body::-webkit-scrollbar-thumb { background:#c2b288; border-radius:5px; }
+
+/* --- combat / enemies --- */
+.rpg-vit-enemy { padding:8px 10px; margin-bottom:8px; background:var(--pg-card); border:1px solid #ddcfa9; border-left:4px solid var(--pg-red); border-radius:5px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+.rpg-vit-enemy .rpg-vit-bar-wrap { margin:5px 0 7px; }
+.rpg-vit-e-del { cursor:pointer; color:var(--pg-faint); margin-left:auto; padding:4px; }
+.rpg-vit-e-del:hover { color:var(--pg-red); }
+
+/* ============================================================
+   EXAM CARD  (medical-examination design, scoped to the panel)
+   ============================================================ */
+#rpg-vit-body .vex-fit { display:flex; justify-content:center; width:100%; }
+#rpg-vit-body .vex {
+    --paper:#f3ead2; --paper-2:#ece0c0; --edge:#cdbb8e;
+    --ink:#2b2014; --ink-soft:#5a4528; --sepia:#7a5c30;
+    --gold:#b8902f; --gold-soft:#d8be78; --oxblood:#8a2c23; --oxblood-deep:#591a15;
+    --navy:#27425b; --hp:#5d7e30; --hp-deep:#3f5a1c; --food:#c79a1f; --food-deep:#8a6a16;
+    position:relative; width:372px; transform-origin:top center; margin-top:24px;
+    transform:rotate(-1deg); color:var(--ink); font-family:"Alegreya",Georgia,serif;
+    background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(0,0,0,0) 16%),
+        radial-gradient(140% 120% at 85% -10%,#f8f0da 0%,var(--paper) 48%,var(--paper-2) 100%);
+    border:1px solid var(--edge); border-radius:9px 9px 4px 4px; padding:16px 18px 20px;
+    box-shadow:0 22px 44px -18px rgba(0,0,0,.6),0 6px 14px rgba(0,0,0,.32),0 1px 0 rgba(255,255,255,.4) inset;
+    animation:vex-drop .5s cubic-bezier(.2,1.1,.3,1) both;
+}
+@keyframes vex-drop { from{opacity:0;transform:rotate(-1deg) translateY(-30px);} to{opacity:1;transform:rotate(-1deg) translateY(0);} }
+#rpg-vit-body .vex::before { content:""; position:absolute; inset:0; pointer-events:none; border-radius:inherit;
+    background:repeating-linear-gradient(91deg,rgba(122,92,48,.035) 0 1px,transparent 1px 4px); mix-blend-mode:multiply; }
+#rpg-vit-body .vex::after { content:""; position:absolute; left:0; right:0; bottom:-6px; height:7px;
+    background:radial-gradient(circle at 6px 0,var(--paper-2) 5px,transparent 5px) repeat-x; background-size:12px 7px; }
+#rpg-vit-body .vex-clip { position:absolute; top:-12px; left:26px; width:15px; height:30px; border:3px solid #b9b2a0;
+    border-bottom:none; border-radius:8px 8px 0 0; transform:rotate(-7deg); z-index:4; }
+
+#rpg-vit-body .vex-hang { position:absolute; top:-30px; right:24px; z-index:5; transform-origin:top center; animation:vex-sway 3.4s ease-in-out infinite; }
+@keyframes vex-sway { 0%,100%{transform:rotate(-4deg);} 50%{transform:rotate(4deg);} }
+#rpg-vit-body .vex-hang .str { position:absolute; left:50%; top:-2px; width:1.5px; height:20px; background:var(--sepia); transform:translateX(-50%); }
+#rpg-vit-body .vex-hang .tag { position:relative; margin-top:18px; background:#f7edd2; border:1px solid var(--edge); border-radius:5px;
+    padding:5px 10px 6px; text-align:center; box-shadow:0 4px 8px rgba(0,0,0,.3); }
+#rpg-vit-body .vex-hang .tag::before { content:""; position:absolute; top:5px; left:50%; width:7px; height:7px; margin-left:-3.5px; border-radius:50%;
+    background:#15110a; box-shadow:inset 0 0 0 1px #f7edd2; }
+#rpg-vit-body .vex-hang .tag b { display:block; font-family:"PT Mono",monospace; font-size:10px; letter-spacing:2px; color:var(--oxblood); margin-top:8px; }
+#rpg-vit-body .vex-hang .tag i { display:block; font-family:"Caveat",cursive; font-size:14px; color:var(--ink-soft); line-height:.9; }
+
+#rpg-vit-body .vex-head { display:flex; align-items:center; gap:10px; border-bottom:1.5px solid var(--edge); padding-bottom:11px; position:relative; z-index:2; cursor:grab; }
+#rpg-vit-body .vex-head:active { cursor:grabbing; }
+#rpg-vit-body .vex-pulse { width:30px; height:30px; flex:none; border-radius:50%; background:var(--oxblood); color:var(--gold-soft);
+    display:grid; place-items:center; box-shadow:0 0 0 2px var(--paper),0 0 0 3px var(--oxblood-deep); }
+#rpg-vit-body .vex-pulse svg { width:17px; height:17px; animation:vex-beat 1.4s ease-in-out infinite; }
+@keyframes vex-beat { 0%,100%{transform:scale(1);} 14%{transform:scale(1.22);} 28%{transform:scale(1);} 42%{transform:scale(1.13);} }
+#rpg-vit-body .vex-title { flex:1; }
+#rpg-vit-body .vex-title h1 { margin:0; font-size:22px; font-weight:800; letter-spacing:.4px; }
+#rpg-vit-body .vex-title .sub { font-family:"PT Mono",monospace; font-size:8.5px; letter-spacing:1.8px; color:var(--sepia); margin-top:2px; }
+#rpg-vit-body .vex-close { width:24px; height:24px; flex:none; border:1px solid var(--edge); border-radius:6px; background:transparent;
+    color:var(--sepia); cursor:pointer; font-size:14px; display:grid; place-items:center; transition:.15s; }
+#rpg-vit-body .vex-close:hover { background:var(--oxblood); color:var(--paper); border-color:var(--oxblood-deep); }
+
+#rpg-vit-body .vex-vital { margin-top:14px; position:relative; z-index:2; }
+#rpg-vit-body .vex-vlabel { display:flex; align-items:center; justify-content:space-between; margin-bottom:5px; }
+#rpg-vit-body .vex-vlabel .left { display:flex; align-items:center; gap:7px; }
+#rpg-vit-body .vex-vlabel .left svg { width:15px; height:15px; }
+#rpg-vit-body .vex-k { font-family:"PT Mono",monospace; font-size:9px; letter-spacing:2px; color:var(--sepia); }
+#rpg-vit-body .vex-v { font-family:"PT Mono",monospace; font-size:13px; font-weight:700; color:var(--ink); letter-spacing:.5px; }
+
+#rpg-vit-body .vex-ecg { position:relative; height:46px; border-radius:7px; border:1px solid var(--edge); overflow:hidden;
+    background:linear-gradient(180deg,#f0e7cd,#e7dbbb); box-shadow:inset 0 1px 3px rgba(43,32,20,.18); }
+#rpg-vit-body .vex-ecg::before { content:""; position:absolute; inset:0; opacity:.5;
+    background:repeating-linear-gradient(90deg,transparent 0 13px,rgba(63,90,28,.12) 13px 14px),
+        repeating-linear-gradient(0deg,transparent 0 11px,rgba(63,90,28,.1) 11px 12px); }
+#rpg-vit-body .vex-ecg svg { position:absolute; inset:0; width:100%; height:100%; }
+#rpg-vit-body .vex-ecg .base { fill:none; stroke:var(--hp); stroke-width:1.4; opacity:.28; }
+#rpg-vit-body .vex-ecg .live { fill:none; stroke-width:2.1; stroke-linejoin:round; stroke-linecap:round;
+    stroke-dasharray:.22 .78; animation:vex-trace 2.2s linear infinite; }
+@keyframes vex-trace { from{stroke-dashoffset:.22;} to{stroke-dashoffset:-.78;} }
+#rpg-vit-body .vex-blip { position:absolute; top:0; left:0; width:7px; height:7px; margin:-3.5px 0 0 -3.5px; border-radius:50%;
+    box-shadow:0 0 7px 2px rgba(123,191,58,.7);
+    offset-path:path("M0 23 H56 L62 23 L67 9 L72 38 L77 14 L82 23 H120 L126 23 L131 9 L136 38 L141 14 L146 23 H200 L206 23 L211 9 L216 38 L221 14 L226 23 H300");
+    animation:vex-blip 2.2s linear infinite; }
+@keyframes vex-blip { from{offset-distance:0%;} to{offset-distance:100%;} }
+
+#rpg-vit-body .vex-cells { display:flex; gap:3px; height:18px; }
+#rpg-vit-body .vex-cells i { flex:1; border-radius:2px; background:#d8c8a0; border:1px solid var(--edge); position:relative; overflow:hidden; }
+#rpg-vit-body .vex-cells i.on::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,#e0b32e,var(--food)); }
+
+#rpg-vit-body .vex-eff { margin-top:16px; border-top:1px dashed var(--edge); padding-top:11px; position:relative; z-index:2; }
+#rpg-vit-body .vex-eff-h { font-family:"PT Mono",monospace; font-size:9px; letter-spacing:2px; color:var(--sepia); margin-bottom:9px; }
+#rpg-vit-body .vex-slots { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+#rpg-vit-body .vex-s { width:30px; height:30px; border-radius:50%; border:1.5px dashed var(--edge); display:grid; place-items:center; color:#b6a374; position:relative; flex:none; }
+#rpg-vit-body .vex-s svg { width:13px; height:13px; }
+#rpg-vit-body .vex-s.filled { border-style:solid; border-color:var(--hp-deep); background:radial-gradient(circle at 38% 32%,#7fa64d,var(--hp-deep)); color:#f4eccd; box-shadow:0 2px 5px rgba(0,0,0,.25); }
+#rpg-vit-body .vex-s.filled.debuff { border-color:var(--oxblood-deep); background:radial-gradient(circle at 38% 32%,#b8463b,var(--oxblood-deep)); }
+#rpg-vit-body .vex-s .vex-dur { position:absolute; bottom:-4px; right:-4px; min-width:14px; height:14px; padding:0 3px; border-radius:7px;
+    background:#f7edd2; border:1px solid var(--edge); color:var(--ink-soft); font-family:"PT Mono",monospace; font-size:8px; line-height:13px; text-align:center; }
+#rpg-vit-body .vex-s .vex-b-del { position:absolute; top:-5px; right:-5px; width:14px; height:14px; border-radius:50%; background:var(--oxblood);
+    color:#f4e4c0; font-size:9px; line-height:14px; text-align:center; cursor:pointer; opacity:0; transition:.15s; }
+#rpg-vit-body .vex-s:hover .vex-b-del { opacity:1; }
+#rpg-vit-body .vex-eff-note { font-family:"Alegreya",serif; font-style:italic; font-size:14px; color:var(--sepia); margin-left:4px; }
+#rpg-vit-body .vex-efflist { margin-top:10px; display:flex; flex-direction:column; gap:7px; }
+#rpg-vit-body .vex-efl { display:grid; grid-template-columns:1fr auto; column-gap:8px; row-gap:1px; font-size:13.5px; border-left:2px solid var(--hp-deep); padding-left:9px; }
+#rpg-vit-body .vex-efl.debuff { border-left-color:var(--oxblood); }
+#rpg-vit-body .vex-efl-n { grid-column:1; grid-row:1; font-weight:700; color:var(--ink); align-self:baseline; line-height:1.25; }
+#rpg-vit-body .vex-efl-e { grid-column:1 / -1; grid-row:2; font-style:italic; color:var(--ink-soft); font-size:12px; line-height:1.35; }
+#rpg-vit-body .vex-efl-e:empty { display:none; }
+#rpg-vit-body .vex-efl-d { grid-column:2; grid-row:1; justify-self:end; align-self:baseline; font-family:"PT Mono",monospace; font-size:10px; color:var(--sepia); white-space:nowrap; }
+#rpg-vit-body .vex-clean { position:absolute; right:2px; top:6px; transform:rotate(-9deg); color:var(--hp-deep);
+    border:2px solid var(--hp-deep); border-radius:5px; padding:2px 7px; font-family:"PT Mono",monospace;
+    font-size:10px; letter-spacing:2px; font-weight:700; opacity:.5; mix-blend-mode:multiply; pointer-events:none; }
+
+/* GM + combat blocks, kept in the parchment palette */
+#rpg-vit-body .vex-ctrl { display:flex; gap:7px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+#rpg-vit-body .vex-ctrl .text_pole { width:62px; background:#fcfbf2; border:1px solid var(--edge); border-radius:6px; color:var(--ink-soft); }
+#rpg-vit-body .vex-section { font-family:"PT Mono",monospace; font-size:9px; letter-spacing:2px; color:var(--sepia);
+    border-top:1px dashed var(--edge); margin-top:16px; padding-top:11px; position:relative; z-index:2; }
+#rpg-vit-body .vex-enemy { padding:8px 10px; margin-top:8px; background:#fbf5e4; border:1px solid var(--edge); border-left:4px solid var(--oxblood); border-radius:6px; }
+#rpg-vit-body .vex-enemy .rpg-vit-bar-wrap { margin:5px 0 7px; height:14px; }
+#rpg-vit-body .vex-add { margin-top:10px; display:flex; flex-direction:column; gap:7px; position:relative; z-index:2; }
+#rpg-vit-body .vex-add .text_pole { width:100%; background:#fcfbf2; border:1px solid var(--edge); border-radius:6px; color:var(--ink-soft); }
+#rpg-vit-body .vex-add-row { display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+@media (prefers-reduced-motion:reduce){ #rpg-vit-body .vex *{ animation:none !important; } }
+
+/* ---- level chip + mana/fatigue cells (added v1.8.0) ---- */
+#rpg-vit-body .vex-lvl { flex:none; display:flex; flex-direction:column; align-items:center; gap:3px; margin-right:6px; }
+#rpg-vit-body .vex-lvl-n { font-family:"PT Mono",monospace; font-size:10px; letter-spacing:1px; font-weight:700; color:var(--oxblood);
+    background:#f7edd2; border:1px solid var(--gold); border-radius:9px; padding:2px 8px; white-space:nowrap; }
+#rpg-vit-body .vex-lvl-bar { width:54px; height:3px; background:#d8c8a0; border-radius:2px; overflow:hidden; }
+#rpg-vit-body .vex-lvl-fill { height:100%; background:linear-gradient(90deg,var(--gold-soft),var(--gold)); transition:width .35s ease; }
+#rpg-vit-body .vex-cells.mana i.on::after { background:linear-gradient(180deg,#4a86b0,#27425b); }
+#rpg-vit-body .vex-cells.fatigue i.on::after { background:linear-gradient(180deg,#c98a3a,#8a5a16); }
+
+/* ---- GM two-column layout (added v1.9.0) ---- */
+#rpg-vit-body .vex-cols { display:block; }
+@media (min-width:681px) {
+    #rpg-vit-body .vex.gm { width:600px; }
+    #rpg-vit-body .vex.gm .vex-cols { display:grid; grid-template-columns:1fr 1fr; column-gap:20px; align-items:start; }
+    #rpg-vit-body .vex.gm .vex-col { min-width:0; }
+    #rpg-vit-body .vex.gm .vex-col > *:first-child { margin-top:0; border-top:none; padding-top:0; }
+    #rpg-vit-modal.vex-wide { width:620px; left:calc(50vw - 310px); }
+}
