@@ -29,7 +29,7 @@ const defaultSettings = {
     baseUrl: 'https://openrouter.ai/api/v1',
     apiKey: '',
     model: 'google/gemma-4-31b-it',
-    temperature: 0.4,
+    temperature: 0.8,
     chatStates: {}
 };
 
