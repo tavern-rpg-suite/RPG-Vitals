@@ -80,7 +80,6 @@
         radial-gradient(140% 120% at 85% -10%,#f8f0da 0%,var(--paper) 48%,var(--paper-2) 100%);
     border:1px solid var(--edge); border-radius:9px 9px 4px 4px; padding:16px 18px 20px;
     box-shadow:0 22px 44px -18px rgba(0,0,0,.6),0 6px 14px rgba(0,0,0,.32),0 1px 0 rgba(255,255,255,.4) inset;
-    animation:vex-drop .5s cubic-bezier(.2,1.1,.3,1) both;
 }
 @keyframes vex-drop { from{opacity:0;transform:rotate(-1deg) translateY(-30px);} to{opacity:1;transform:rotate(-1deg) translateY(0);} }
 #rpg-vit-body .vex::before { content:""; position:absolute; inset:0; pointer-events:none; border-radius:inherit;
@@ -153,7 +152,10 @@
     color:#f4e4c0; font-size:9px; line-height:14px; text-align:center; cursor:pointer; opacity:0; transition:.15s; }
 #rpg-vit-body .vex-s:hover .vex-b-del { opacity:1; }
 #rpg-vit-body .vex-eff-note { font-family:"Alegreya",serif; font-style:italic; font-size:14px; color:var(--sepia); margin-left:4px; }
-#rpg-vit-body .vex-efflist { margin-top:10px; display:flex; flex-direction:column; gap:7px; }
+#rpg-vit-body .vex-efflist { margin-top:10px; display:flex; flex-direction:column; gap:7px; max-height:172px; overflow-y:auto; overflow-x:hidden; padding-right:5px; scrollbar-width:thin; scrollbar-color:var(--oxblood) rgba(120,90,50,.14); }
+#rpg-vit-body .vex-efflist::-webkit-scrollbar { width:8px; }
+#rpg-vit-body .vex-efflist::-webkit-scrollbar-thumb { background:var(--oxblood); border-radius:5px; }
+#rpg-vit-body .vex-efflist::-webkit-scrollbar-track { background:transparent; }
 #rpg-vit-body .vex-efl { display:grid; grid-template-columns:1fr auto; column-gap:8px; row-gap:1px; font-size:13.5px; border-left:2px solid var(--hp-deep); padding-left:9px; }
 #rpg-vit-body .vex-efl.debuff { border-left-color:var(--oxblood); }
 #rpg-vit-body .vex-efl-n { grid-column:1; grid-row:1; font-weight:700; color:var(--ink); align-self:baseline; line-height:1.25; }

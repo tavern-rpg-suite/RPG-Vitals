@@ -4,15 +4,17 @@ A SillyTavern extension that gives the player a living **HP bar**, optional **hu
 
 > Part of the RPG suite. It exposes a small bridge (`window.RPG.vitals`) and reads `window.RPG.equipment`, so other modules plug into it — but it works perfectly on its own.
 
-**Version 1.9.1**
+**Version 1.9.6**
 
 ---
 
 ## ✨ Features
 
 - ❤️ **HP bar** with an animated ECG, current / max, and (in GM mode) Heal / Damage / Set controls.
-- 🍖 **Hunger / satiety** (optional) — depletes over messages; at zero you start starving and lose HP, and the model is told to play it.
-- ✳️ **Effects** — buffs (green) and debuffs (red) with a name, description and a turn duration that ticks down and wears off. Effects added with no duration can auto-fade after a random number of messages (default up to 20, configurable).
+- 🍖 **Hunger / satiety** (optional) — depletes over messages; at zero you start starving and lose HP. **Eating always adds satiety** (the field is now framed as *satiety*, so a meal never reads as "more hungry").
+- 🩹 **Self‑care from your own words** — when *you* narrate eating, drinking, **bandaging a wound, resting or a healing potion**, the extension catches it and applies the effect. The **AI decides a realistic amount** — an ordinary bandage restores only a little and **never** heals to full; real rest or a strong remedy does more.
+- 📜 **Effects that actually matter** — active buffs/debuffs are injected with a directive telling the narrator to let them *shape the scene*: each `+` is a real advantage and each `−` a real hindrance in fitting moments (combat, social, physical).
+- ✳️ **Effects** — buffs (green) and debuffs (red) with a name, description and a turn duration that ticks down and wears off. Effects added with no duration can auto‑fade after a random number of messages (default up to 20, configurable); **tagged** effects (e.g. a permanent training perk or a worn‑equipment buff) are sticky and only removed explicitly. The list **scrolls** once you have more than a few, so the card never stretches.
 - ⚔️ **Combat & enemies** — track foes with their own HP bars, either by hand (GM) or automatically from the story.
 - 🧬 **Level, Mana & Fatigue** (each optional) — a tiny `Lv N` badge (XP from defeated enemies + AI story milestones, max 100), plus mana and fatigue bars the story raises and spends.
 - 🧠 **Context injection** — a compact note like `[{{user}}'s HP: 70/100. Active effects: +Well-fed (3); −Bruised ribs (1). Hunger: 40/100.]` keeps the character aware of your condition.
@@ -59,10 +61,15 @@ Each is injected into the prompt when enabled, so the character knows you're low
 
 ## 🔌 Cross-extension bridge
 
-Other modules can affect you through `window.RPG.vitals`: `getHp()`, `heal(n)`, `damage(n)`, `setHp(n,max)`, `feed(n)`, `addBuff(...)`, `listBuffs()`, `getMana()/addMana(n)/setMana(n)`, `getFatigue()/addFatigue(n)/setFatigue(n)`, `getLevel()/addXp(n)`, `refresh()`. Examples in the suite: a vendor quest reward lands as a buff; eating a *food* item from the inventory heals you here. Vitals in turn reads `window.RPG.equipment` for attack/defense.
+Other modules can affect you through `window.RPG.vitals`: `getHp()`, `heal(n)`, `damage(n)`, `setHp(n,max)`, `feed(n)`, `addBuff(...)`, `removeBuff(idOrName/tag)`, `listBuffs()`, `getMana()/addMana(n)/setMana(n)`, `getFatigue()/addFatigue(n)/setFatigue(n)`, `getLevel()/addXp(n)`, `refresh()`. Examples in the suite: a vendor quest reward lands as a buff; eating a *food* item from the inventory heals you here. Vitals in turn reads `window.RPG.equipment` for attack/defense.
 
 ## 🩺 Troubleshooting
 
 - **An enemy won't go away.** With auto-combat, removal depends on the model noticing the foe left; the wording now also clears enemies when you clearly escape. If one still lingers, click the **✕** on its card.
 - **Nothing auto-updates.** Auto HP/effects and auto-combat each need a working API URL/key/model; without them, use GM controls.
 - **Double damage in fights.** When auto-combat is on it owns incoming damage, so the HP auto-detect won't also subtract it.
+- **Eating showed −20 / did nothing.** Fixed in 1.9.3 — the field is now *satiety* (eating is always positive), and your own "I ate…" message is read too.
+- **I bandaged my wound but HP didn't move.** Fixed in 1.9.6 — self‑care in your own message (bandage/rest/potion) now heals a realistic, AI‑decided amount (never 100% from a plain bandage), and can also restore mana/fatigue.
+- **Buffs weren't influencing the story.** Fixed in 1.9.4 — an injected directive now tells the narrator to apply active effects as real advantages/hindrances.
+- **Stats changed twice when I swiped.** Fixed in 1.9.8 — a bot turn's consequences (buff ticks, hunger drain, AI HP/effect/combat detection) now apply exactly once per message. Swiping or regenerating shows new prose but no longer re-applies the changes on top of the old ones.
+- **The card "jumped"/flickered when a stat updated.** Fixed in 1.9.8 — the panel now repaints values in place instead of rebuilding the whole card, so the ECG/pulse animations no longer restart and bars glide smoothly.

@@ -29,12 +29,14 @@ const defaultSettings = {
     baseUrl: 'https://openrouter.ai/api/v1',
     apiKey: '',
     model: 'google/gemma-4-31b-it',
-    temperature: 0.8,
+    temperature: 0.4,
     chatStates: {}
 };
 
 let settings = {};
 let state = null;
+let vitalsBusy = false; // re-entrancy lock so auto-analyses can't stack/loop (prevents freezes after eating)
+let _builtSig = null;   // signature of the last full panel build — lets stat updates repaint in place (no flicker)
 
 function genId() { return Math.random().toString(36).substr(2, 9); }
 function escapeHtml(x) {
@@ -48,7 +50,7 @@ const I18N = {
         effects: 'Effects', add_effect: 'Add effect', name_ph: 'Effect name', effect_ph: 'What it does (optional)',
         kind: 'Kind', buff: 'Buff', debuff: 'Debuff', duration: 'Turns', no_effects: 'No active effects.',
         remove: 'Remove', save: 'Save', cancel: 'Cancel', forever: '∞',
-        inject_hp: "{{user}}'s HP: {hp}/{max}", inject_effects: 'Active effects',
+        inject_hp: "{{user}}'s HP: {hp}/{max}", inject_effects: 'Active effects', inject_effects_note: 'Let these effects meaningfully shape the scene: each + gives {{user}} a real, fitting advantage and each − a real hindrance in relevant moments (combat, social, physical), without narrating them as on-screen game text',
         toast_added: 'Effect added.', toast_expired: '{name} wore off.',
         toast_healed: 'Healed +{n} HP.', toast_hurt: '−{n} HP.', toast_need_name: 'Enter an effect name.',
         toast_armor: 'Armor absorbed {n} damage.',
@@ -83,7 +85,7 @@ const I18N = {
         effects: 'Эффекты', add_effect: 'Добавить эффект', name_ph: 'Название эффекта', effect_ph: 'Что делает (необязательно)',
         kind: 'Тип', buff: 'Бафф', debuff: 'Дебафф', duration: 'Ходов', no_effects: 'Активных эффектов нет.',
         remove: 'Убрать', save: 'Сохранить', cancel: 'Отмена', forever: '∞',
-        inject_hp: 'HP игрока {{user}}: {hp}/{max}', inject_effects: 'Активные эффекты',
+        inject_hp: 'HP игрока {{user}}: {hp}/{max}', inject_effects: 'Активные эффекты', inject_effects_note: 'Эти эффекты должны реально влиять на сцену: каждый + даёт {{user}} уместное преимущество, а каждый − — реальную помеху в подходящие моменты (бой, общение, физика), не описывая их как игровой текст на экране',
         toast_added: 'Эффект добавлен.', toast_expired: 'Эффект «{name}» прошёл.',
         toast_healed: 'Лечение +{n} HP.', toast_hurt: '−{n} HP.', toast_need_name: 'Введите название эффекта.',
         toast_armor: 'Броня поглотила {n} урона.',
@@ -223,20 +225,30 @@ function setHp(n, max) {
 function addBuff(b) {
     if (!b || !b.name) return null;
     let dur = (typeof b.duration === 'number' && b.duration > 0) ? Math.round(b.duration) : null;
-    // No explicit duration → optionally fade after a random number of messages
-    if (dur == null && settings.autoExpire) {
+    // No explicit duration → optionally fade after a random number of messages.
+    // Tagged buffs (e.g. worn equipment) are "sticky" — they never auto-fade; they're removed explicitly.
+    if (dur == null && settings.autoExpire && !b.tag) {
         const maxN = Math.max(1, parseInt(settings.autoExpireMax) || 20);
         dur = 1 + Math.floor(Math.random() * maxN); // 1..maxN
     }
     const buff = {
         id: genId(), name: String(b.name), effect: String(b.effect || ''),
         kind: (b.kind === 'debuff') ? 'debuff' : 'buff',
-        duration: dur // null = until removed
+        duration: dur, // null = until removed
+        tag: b.tag ? String(b.tag) : undefined // optional owner tag (e.g. "eq:weapon") for later removal
     };
     state.buffs.push(buff); saveState(); renderPanel(); buildInjection();
     return buff;
 }
-function removeBuff(id) { state.buffs = state.buffs.filter(b => b.id !== id); saveState(); renderPanel(); buildInjection(); }
+// remove by buff id, or by owner tag, or by exact name (first match wins for name)
+function removeBuff(key) {
+    if (!state || key == null) return;
+    const before = state.buffs.length;
+    if (state.buffs.some(b => b.tag && b.tag === key)) state.buffs = state.buffs.filter(b => b.tag !== key);
+    else if (state.buffs.some(b => b.id === key)) state.buffs = state.buffs.filter(b => b.id !== key);
+    else { const i = state.buffs.findIndex(b => b.name === key); if (i >= 0) state.buffs.splice(i, 1); }
+    if (state.buffs.length !== before) { saveState(); renderPanel(); buildInjection(); }
+}
 
 // ---- combat / enemies ----
 function playerAttackPower() {
@@ -299,10 +311,52 @@ async function callAI(systemPrompt, userPrompt) {
         } catch (e) { if (i === 1) throw e; }
     }
 }
-async function analyzeMessage(messageId) {
+const EAT_RE = /\b(eat|eats|eating|ate|drink|drinks|drinking|drank|bite|bites|chew|chews|swallow|swallows|sip|sips|munch|devour|feast|gulp|nibble)\b|съе(л|ла|сть|ем|шь)|\bест\b|поел|перекус|откус|кус(аю|нул)|жу(ю|ёт)|пь(ю|ёт)|пил[аои]?\b|выпи|глот|хлебн|заеда/i;
+function mentionsEating(text) { return EAT_RE.test(String(text || '')); }
+// healing / rest / mana actions the PLAYER may narrate about themselves
+const CARE_RE = /\b(bandag|patch(ed|es|ing)? up|dress(ed|ing)? the wound|tend(ed|ing)?|stitch|heal|rest|sleep|slept|nap|recover|recuperat|meditat|catch (my|her|his) breath|first aid|salve|ointment|potion|drink.*potion)\b|перевяз|перевязк|перевязал|обработал.*ран|заклеил|зашил|бинт|лечу|лечит|лечен|исцел|отдых|отдохн|поспал|вздремн|передохн|восстанавлив|отлежал|медитир|отдышал|мазь|зель[ея]|снадоб/i;
+function mentionsCare(text) { return CARE_RE.test(String(text || '')); }
+
+async function analyzeMessage(messageId, opts) {
+    opts = opts || {};
     if (!settings.enabled || !settings.autoDetect || !settings.apiKey || !state) return;
     const msg = getContext().chat[messageId];
-    if (!msg || msg.is_user || msg.is_system || !msg.mes) return;
+    if (!msg || msg.is_system || !msg.mes) return;
+    if (msg.is_user && !opts.selfReport) return; // the normal scan ignores the player's own message
+    if (opts.selfReport) {
+        // the PLAYER narrated something about themselves — catch self-care they'd control: eating, and tending/resting
+        const eats = settings.hungerEnabled && mentionsEating(msg.mes);
+        const cares = mentionsCare(msg.mes);
+        if (!eats && !cares) return;
+        if (vitalsBusy) return; // never stack analyses — this is what caused freezes after eating
+        vitalsBusy = true;
+        try {
+            const whoS = getContext().name1 || 'the player';
+            const askSat = settings.hungerEnabled ? `\n"satiety_delta": satiety GAINED by eating/drinking THIS message — POSITIVE 0..40 (snack ~10, meal ~30, drink ~5-15), else 0.` : '';
+            const askMana = settings.manaEnabled ? `\n"mana_delta": mana RECOVERED by resting/meditating/a potion THIS message — POSITIVE 0..40, else 0.` : '';
+            const askFat = settings.fatigueEnabled ? `\n"fatigue_delta": NEGATIVE if they rested/slept (recovered), 0 otherwise.` : '';
+            const sysS = `The player "${whoS}" (currently ${state.hp}/${state.maxHp} HP) just narrated an action about THEMSELVES. Report only self-care they actually did.
+"hp_delta": HP RECOVERED by tending a wound / first aid / resting / a healing potion THIS message — a POSITIVE, REALISTIC number. Basic first aid or a bandage restores only a LITTLE (about 5-15); real rest or a good remedy more (15-35); a potent healing potion most. It must NEVER fully heal from one ordinary bandage. 0 if no real healing happened.${askSat}${askMana}${askFat}
+Optionally "add_effects": one short effect if clearly granted (e.g. "Bandaged", "Rested"), else empty.
+Write effect names in ${genLang()}. Output strictly JSON: {"hp_delta":0${settings.hungerEnabled ? ',"satiety_delta":0' : ''}${settings.manaEnabled ? ',"mana_delta":0' : ''}${settings.fatigueEnabled ? ',"fatigue_delta":0' : ''},"add_effects":[]}`;
+            const resS = await callAI(sysS, String(msg.mes).slice(0, 1500));
+            if (!resS) return;
+            const notesS = [];
+            const hd = parseInt(resS.hp_delta);
+            if (hd > 0) { heal(Math.min(hd, 40)); notesS.push(`${t('hp')} +${Math.min(hd, 40)}`); }
+            const sd = parseInt(resS.satiety_delta);
+            if (settings.hungerEnabled && sd > 0) { feed(sd); notesS.push(`${t('lbl_satiety')} +${sd}`); }
+            const md = parseInt(resS.mana_delta);
+            if (settings.manaEnabled && md > 0) { addMana(md); notesS.push(`${t('lbl_mana')} +${md}`); }
+            const fd = parseInt(resS.fatigue_delta);
+            if (settings.fatigueEnabled && fd < 0) { addFatigue(fd); notesS.push(`${t('lbl_fatigue')} ${fd}`); }
+            for (const e of (Array.isArray(resS.add_effects) ? resS.add_effects : [])) if (e && e.name) { addBuff(e); notesS.push('+' + e.name); }
+            if (notesS.length) toastr.info(t('auto_changed') + ' ' + notesS.join(', '));
+        } catch (e) { /* silent */ } finally { vitalsBusy = false; }
+        return;
+    }
+    if (vitalsBusy) return; // don't run the story scan while another analysis is in flight
+    vitalsBusy = true;
     try {
         const effList = state.buffs.map(b => b.name).join(', ') || 'none';
         const hungerInfo = settings.hungerEnabled ? `, hunger ${state.hunger}/100` : '';
@@ -315,7 +369,7 @@ async function analyzeMessage(messageId) {
         // build the JSON schema + rules only for the enabled optional stats
         let fields = '"hp_delta":0,"add_effects":[{"name":"","effect":"","kind":"buff","duration":3}],"remove_effects":[]';
         let rules = '';
-        if (settings.hungerEnabled) { fields += ',"hunger_delta":0'; }
+        if (settings.hungerEnabled) { fields += ',"satiety_delta":0'; rules += `\n- "satiety_delta": +N when "${who}" EATS or DRINKS this message (fuller: a snack ~10, a meal ~30, a drink ~5-15). Eating or drinking is ALWAYS positive. Use a negative number ONLY if the text explicitly shows a long stretch with no food at all. Otherwise 0.`; }
         if (settings.manaEnabled) { fields += ',"mana_delta":0'; rules += `\n- "mana_delta": mana "${who}" spent (negative, e.g. casting/using magic) or recovered (positive, e.g. rest/potion/meditation) THIS message.`; }
         if (settings.fatigueEnabled) { fields += ',"fatigue_delta":0'; rules += `\n- "fatigue_delta": how much MORE tired "${who}" got (positive: hard exertion, fighting, sprinting, no sleep) or how much they recovered (negative: rest/sleep) THIS message.`; }
         if (settings.levelEnabled) { fields += ',"xp_delta":0'; rules += `\n- "xp_delta": experience for a real achievement by "${who}" THIS message (finishing a quest, a big victory, a breakthrough) — usually 0, occasionally 10–40. Do NOT award xp just for talking.`; }
@@ -334,14 +388,14 @@ Output strictly JSON: {${fields}}`;
             if (hpd > 0) { heal(hpd); notes.push(`HP +${hpd}`); }
             else if (hpd < 0) { damage(-hpd); notes.push(`HP ${hpd}`); }
         }
-        if (settings.hungerEnabled && typeof res.hunger_delta === 'number' && res.hunger_delta !== 0) { setHunger(state.hunger + res.hunger_delta); notes.push(`${t('hunger')} ${res.hunger_delta > 0 ? '+' : ''}${res.hunger_delta}`); }
+        if (settings.hungerEnabled && typeof res.satiety_delta === 'number' && res.satiety_delta !== 0) { setHunger(state.hunger + res.satiety_delta); notes.push(`${t('lbl_satiety')} ${res.satiety_delta > 0 ? '+' : ''}${res.satiety_delta}`); }
         if (settings.manaEnabled && typeof res.mana_delta === 'number' && res.mana_delta !== 0) { addMana(res.mana_delta); notes.push(`${t('mana_word')} ${res.mana_delta > 0 ? '+' : ''}${res.mana_delta}`); }
         if (settings.fatigueEnabled && typeof res.fatigue_delta === 'number' && res.fatigue_delta !== 0) { addFatigue(res.fatigue_delta); notes.push(`${t('fatigue_word')} ${res.fatigue_delta > 0 ? '+' : ''}${res.fatigue_delta}`); }
         if (settings.levelEnabled && typeof res.xp_delta === 'number' && res.xp_delta > 0) { addXp(res.xp_delta); notes.push(`${t('xp')} +${res.xp_delta}`); }
         for (const e of (Array.isArray(res.add_effects) ? res.add_effects : [])) if (e && e.name) { addBuff(e); notes.push((e.kind === 'debuff' ? '−' : '+') + e.name); }
         for (const nm of (Array.isArray(res.remove_effects) ? res.remove_effects : [])) { const b = state.buffs.find(x => x.name === nm); if (b) removeBuff(b.id); }
         if (notes.length) toastr.info(t('auto_changed') + ' ' + notes.join(', '));
-    } catch (e) { /* silent: don't disrupt chat on API errors */ }
+    } catch (e) { /* silent: don't disrupt chat on API errors */ } finally { vitalsBusy = false; }
 }
 async function analyzeCombat(messageId) {
     if (!settings.enabled || !settings.combatAuto || !settings.apiKey || !state) return;
@@ -429,6 +483,25 @@ function tickBuffs(messageId) {
     if (expired) toastr.info(t('toast_expired', { name: expired }));
 }
 
+// A bot turn's consequences (buff ticks, hunger drain, AI HP/effect/combat analysis) must apply
+// EXACTLY ONCE per message. Swiping or regenerating re-fires MESSAGE_RECEIVED for the same message,
+// which previously stacked every change again. A per-message marker makes it idempotent.
+function onBotMessage(id) {
+    const msg = getContext().chat[id];
+    if (!msg || msg.is_user || msg.is_system) return;
+    if (msg.rpg_vitals_done === true) return; // already handled — this fire is a swipe / regen
+    msg.rpg_vitals_done = true;               // mark up-front so re-entrant fires are ignored too
+    tickBuffs(id);
+    analyzeMessage(id);
+    analyzeCombat(id);
+}
+function onUserMessage(id) {
+    const msg = getContext().chat[id];
+    if (!msg || msg.rpg_vitals_self_done === true) return;
+    if (msg) msg.rpg_vitals_self_done = true;
+    analyzeMessage(id, { selfReport: true });
+}
+
 function buildInjection() {
     if (!settings.enabled || !state || settings.injectDepth < 0) {
         setExtensionPrompt(PROMPT_KEY, '', 2, 0, false, extension_prompt_roles.SYSTEM);
@@ -444,6 +517,7 @@ function buildInjection() {
             return `${sign}${b.name}${b.effect ? ': ' + b.effect : ''}${dur}`;
         }).join('; ');
         parts.push(`${t('inject_effects')}: ${list}`);
+        parts.push(t('inject_effects_note'));
     }
     if (settings.hungerEnabled && typeof state.hunger === 'number') parts.push(t('inject_hunger', { h: state.hunger }));
     if (settings.manaEnabled && typeof state.mana === 'number') parts.push(t('inject_mana', { m: state.mana }));
@@ -503,7 +577,7 @@ function renderButton() {
     }
     if (!settings.enabled) { $('#rpg-vit-btn').hide(); return; }
     $('#rpg-vit-btn').show();
-    $('#rpg-vit-btn').off('click').on('click', () => { renderPanel(); $('#rpg-vit-modal').toggleClass('visible'); });
+    $('#rpg-vit-btn').off('click').on('click', () => { _builtSig = null; renderPanel(); $('#rpg-vit-modal').toggleClass('visible'); });
 }
 function makeModalDraggable(elmnt, handle) {
     let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
@@ -519,7 +593,91 @@ function makeModalDraggable(elmnt, handle) {
     };
 }
 
+// Dispatcher: full rebuild only when the panel's STRUCTURE changes; otherwise repaint values in
+// place so routine stat updates don't tear down the DOM (which caused the panel to "jump"/flicker
+// and restarted the ECG/pulse animations every time).
 function renderPanel() {
+    const bodyEl = document.getElementById('rpg-vit-body');
+    if (!bodyEl || !state) return;
+    const sig = structSig();
+    if (sig === _builtSig && bodyEl.querySelector('.vex')) {
+        try { paintPanel(); return; } catch (e) { _builtSig = null; /* fall back to a full rebuild */ }
+    }
+    _builtSig = sig;
+    buildPanel();
+}
+
+// What makes the DOM shape change (as opposed to just values). Kept deliberately broad: if in doubt
+// it differs, we simply rebuild (the old, safe behaviour) — we never risk showing stale content.
+function structSig() {
+    if (!state) return 'none';
+    const flat = (state.hp / (state.maxHp || 100)) <= 0;
+    const buffs = state.buffs.map(b => `${b.id}:${b.kind === 'debuff' ? 'd' : 'b'}:${b.duration == null ? 'x' : 'n'}:${b.effect ? 'e' : ''}`).join(',');
+    const enemies = state.enemies.map(e => e.id).join(',');
+    return [
+        settings.language, !!settings.gmControls, !!settings.hungerEnabled, !!settings.manaEnabled,
+        !!settings.fatigueEnabled, !!settings.levelEnabled, flat,
+        state.buffs.length === 0 ? 'empty' : 'has', buffs,
+        (settings.gmControls || state.enemies.length) ? 'combat' : 'nocombat', enemies
+    ].join('|');
+}
+
+function paintCells(container, val) {
+    if (!container) return;
+    const filled = Math.max(0, Math.min(10, Math.round((val || 0) / 10)));
+    container.querySelectorAll('i').forEach((c, i) => c.classList.toggle('on', i < filled));
+}
+function syncGmInputs(body) {
+    if (!settings.gmControls) return;
+    const pairs = [['.rpg-vit-set-hp', state.hp], ['.rpg-vit-set-max', state.maxHp], ['.rpg-vit-mana-set', state.mana], ['.rpg-vit-fat-set', state.fatigue]];
+    for (const [sel, val] of pairs) {
+        const el = body.querySelector(sel);
+        if (el && el !== document.activeElement) el.value = val;
+    }
+}
+// In-place value update — no DOM teardown, so animations keep running and bars transition smoothly.
+function paintPanel() {
+    const body = document.getElementById('rpg-vit-body');
+    if (!body || !state) return;
+    const hpc = hpColor();
+    const hpv = body.querySelector('.js-hp-v'); if (hpv) hpv.textContent = `${state.hp} / ${state.maxHp}`;
+    const live = body.querySelector('.vex-ecg .live'); if (live) live.style.stroke = hpc;
+    const blip = body.querySelector('.vex-blip'); if (blip) blip.style.background = hpc;
+    if (settings.hungerEnabled) {
+        const sv = body.querySelector('.js-sat-v'); if (sv) sv.textContent = `${state.hunger} / 100`;
+        paintCells(body.querySelector('.js-sat-cells'), state.hunger);
+    }
+    if (settings.manaEnabled) {
+        const mv = body.querySelector('.js-mana-v'); if (mv) mv.textContent = `${state.mana} / 100`;
+        paintCells(body.querySelector('.js-mana-cells'), state.mana);
+    }
+    if (settings.fatigueEnabled) {
+        const fv = body.querySelector('.js-fat-v'); if (fv) fv.textContent = `${state.fatigue} / 100`;
+        paintCells(body.querySelector('.js-fat-cells'), state.fatigue);
+    }
+    if (settings.levelEnabled) {
+        const ln = body.querySelector('.vex-lvl-n'); if (ln) ln.textContent = `${t('level_word')} ${state.level}`;
+        const lf = body.querySelector('.vex-lvl-fill'); if (lf) lf.style.width = (state.level >= MAX_LEVEL ? 100 : state.xp) + '%';
+        const lc = body.querySelector('.vex-lvl'); if (lc) lc.setAttribute('title', `${state.xp}/${XP_PER_LEVEL} ${t('xp')}`);
+    }
+    for (const b of state.buffs) {
+        if (b.duration != null) {
+            const d = body.querySelector(`.vex-s[data-bid="${b.id}"] .vex-dur`); if (d) d.textContent = b.duration;
+        }
+        const efd = body.querySelector(`.vex-efl[data-bid="${b.id}"] .vex-efl-d`);
+        if (efd) efd.textContent = (b.duration == null ? t('forever') : b.duration);
+    }
+    for (const e of state.enemies) {
+        const row = body.querySelector(`.vex-enemy[data-eid="${e.id}"]`); if (!row) continue;
+        const num = row.querySelector('.js-e-hp');
+        if (num) num.textContent = `${e.hp}/${e.max}${e.atk ? ` · ${t('enemy_atk_ph')} ${e.atk}` : ''}`;
+        const bar = row.querySelector('.rpg-vit-bar');
+        if (bar) bar.style.width = Math.max(0, Math.min(100, Math.round(e.hp / (e.max || 1) * 100))) + '%';
+    }
+    syncGmInputs(body);
+}
+
+function buildPanel() {
     const body = $('#rpg-vit-body');
     if (body.length === 0 || !state) return;
     const pct = Math.max(0, Math.min(100, Math.round((state.hp / (state.maxHp || 100)) * 100)));
@@ -581,13 +739,13 @@ function renderPanel() {
     } else {
         slots = state.buffs.map(b => {
             const deb = b.kind === 'debuff';
-            return `<div class="vex-s filled ${deb ? 'debuff' : ''}" title="${escapeHtml(b.name + (b.effect ? ' — ' + b.effect : ''))}">
+            return `<div class="vex-s filled ${deb ? 'debuff' : ''}" data-bid="${b.id}" title="${escapeHtml(b.name + (b.effect ? ' — ' + b.effect : ''))}">
                 ${deb ? DOWN : UP}
                 ${b.duration == null ? '' : `<span class="vex-dur">${b.duration}</span>`}
                 ${gm ? `<span class="vex-b-del rpg-vit-b-del" data-id="${b.id}">✕</span>` : ''}
             </div>`;
         }).join('');
-        efflist = `<div class="vex-efflist">` + state.buffs.map(b => `<div class="vex-efl ${b.kind === 'debuff' ? 'debuff' : ''}">
+        efflist = `<div class="vex-efflist">` + state.buffs.map(b => `<div class="vex-efl ${b.kind === 'debuff' ? 'debuff' : ''}" data-bid="${b.id}">
             <span class="vex-efl-n">${escapeHtml(b.name)}</span>
             <span class="vex-efl-e">${b.effect ? escapeHtml(b.effect) : ''}</span>
             <span class="vex-efl-d">${b.duration == null ? escapeHtml(t('forever')) : b.duration}</span>
@@ -624,8 +782,8 @@ function renderPanel() {
     const combatBlock = (gm || state.enemies.length) ? `<div class="vex-section">${escapeHtml(t('combat'))}</div>
         ${state.enemies.length ? state.enemies.map(e => {
             const epct = Math.max(0, Math.min(100, Math.round(e.hp / (e.max || 1) * 100)));
-            return `<div class="vex-enemy">
-                <div class="rpg-vit-hp-top"><span class="rpg-vit-b-name">${escapeHtml(e.name)}</span><span class="rpg-vit-hp-num">${e.hp}/${e.max}${e.atk ? ` · ${escapeHtml(t('enemy_atk_ph'))} ${e.atk}` : ''} <i class="fa-solid fa-xmark rpg-vit-e-del" data-id="${e.id}" title="${escapeHtml(t('remove'))}" style="cursor:pointer;color:var(--sepia);margin-left:6px;"></i></span></div>
+            return `<div class="vex-enemy" data-eid="${e.id}">
+                <div class="rpg-vit-hp-top"><span class="rpg-vit-b-name">${escapeHtml(e.name)}</span><span class="rpg-vit-hp-num"><span class="js-e-hp">${e.hp}/${e.max}${e.atk ? ` · ${escapeHtml(t('enemy_atk_ph'))} ${e.atk}` : ''}</span> <i class="fa-solid fa-xmark rpg-vit-e-del" data-id="${e.id}" title="${escapeHtml(t('remove'))}" style="cursor:pointer;color:var(--sepia);margin-left:6px;"></i></span></div>
                 <div class="rpg-vit-bar-wrap"><div class="rpg-vit-bar" style="width:${epct}%; background:#b0432f;"></div></div>
                 ${gm ? `<div class="vex-ctrl">
                     <button class="rpg-vit-btn ok rpg-vit-atk" data-id="${e.id}"><i class="fa-solid fa-gavel"></i> ${escapeHtml(t('attack'))}</button>
@@ -652,23 +810,23 @@ function renderPanel() {
         <div class="vex-cols">
         <div class="vex-col">
         <div class="vex-vital">
-            <div class="vex-vlabel"><div class="left">${HEART}<span class="vex-k">${escapeHtml(t('lbl_health'))}</span></div><span class="vex-v">${state.hp} / ${state.maxHp}</span></div>
+            <div class="vex-vlabel"><div class="left">${HEART}<span class="vex-k">${escapeHtml(t('lbl_health'))}</span></div><span class="vex-v js-hp-v">${state.hp} / ${state.maxHp}</span></div>
             ${ecg}
             ${hpCtrl}
         </div>
         ${settings.hungerEnabled ? `<div class="vex-vital">
-            <div class="vex-vlabel"><div class="left">${FOOD}<span class="vex-k">${escapeHtml(t('lbl_satiety'))}</span></div><span class="vex-v">${state.hunger} / 100</span></div>
-            <div class="vex-cells">${cells}</div>
+            <div class="vex-vlabel"><div class="left">${FOOD}<span class="vex-k">${escapeHtml(t('lbl_satiety'))}</span></div><span class="vex-v js-sat-v">${state.hunger} / 100</span></div>
+            <div class="vex-cells js-sat-cells">${cells}</div>
             ${hungerCtrl}
         </div>` : ''}
         ${settings.manaEnabled ? `<div class="vex-vital">
-            <div class="vex-vlabel"><div class="left">${MANA}<span class="vex-k">${escapeHtml(t('lbl_mana'))}</span></div><span class="vex-v">${state.mana} / 100</span></div>
-            <div class="vex-cells mana">${manaCells}</div>
+            <div class="vex-vlabel"><div class="left">${MANA}<span class="vex-k">${escapeHtml(t('lbl_mana'))}</span></div><span class="vex-v js-mana-v">${state.mana} / 100</span></div>
+            <div class="vex-cells mana js-mana-cells">${manaCells}</div>
             ${manaCtrl}
         </div>` : ''}
         ${settings.fatigueEnabled ? `<div class="vex-vital">
-            <div class="vex-vlabel"><div class="left">${FATIGUE}<span class="vex-k">${escapeHtml(t('lbl_fatigue'))}</span></div><span class="vex-v">${state.fatigue} / 100</span></div>
-            <div class="vex-cells fatigue">${fatCells}</div>
+            <div class="vex-vlabel"><div class="left">${FATIGUE}<span class="vex-k">${escapeHtml(t('lbl_fatigue'))}</span></div><span class="vex-v js-fat-v">${state.fatigue} / 100</span></div>
+            <div class="vex-cells fatigue js-fat-cells">${fatCells}</div>
             ${fatCtrl}
         </div>` : ''}
         </div>
@@ -853,9 +1011,10 @@ jQuery(() => {
     if (getContext().chatId) { loadState(); renderButton(); buildInjection(); }
 
     eventSource.on(event_types.CHAT_CHANGED, () => {
-        setTimeout(() => { loadState(); renderButton(); renderPanel(); buildInjection(); }, 100);
+        setTimeout(() => { loadState(); renderButton(); _builtSig = null; renderPanel(); buildInjection(); }, 100);
     });
-    eventSource.on(event_types.MESSAGE_RECEIVED, (id) => { tickBuffs(id); analyzeMessage(id); analyzeCombat(id); });
+    eventSource.on(event_types.MESSAGE_RECEIVED, (id) => onBotMessage(id));
+    if (event_types.MESSAGE_SENT) eventSource.on(event_types.MESSAGE_SENT, (id) => onUserMessage(id));
 });
 
 // ============================================================
@@ -872,6 +1031,7 @@ window.RPG.vitals = {
     damage: (n) => { if (state) damage(n); },
     setHp: (n, max) => { if (state) setHp(n, max); },
     addBuff: (b) => state ? addBuff(b) : null,
+    removeBuff: (key) => { if (state) removeBuff(key); },
     listBuffs: () => state ? state.buffs.map(b => ({ name: b.name, effect: b.effect, kind: b.kind, duration: b.duration })) : [],
     getMana: () => state ? state.mana : null,
     setMana: (n) => { if (state) setMana(n); },
@@ -881,5 +1041,5 @@ window.RPG.vitals = {
     addFatigue: (n) => { if (state) addFatigue(n); },
     getLevel: () => state ? state.level : null,
     addXp: (n) => { if (state) addXp(n); },
-    refresh: () => { loadState(); renderPanel(); buildInjection(); }
+    refresh: () => { loadState(); _builtSig = null; renderPanel(); buildInjection(); }
 };
