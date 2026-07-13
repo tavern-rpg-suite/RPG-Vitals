@@ -1,5 +1,5 @@
 import { getContext, extension_settings } from '../../../extensions.js';
-import { eventSource, event_types, saveSettingsDebounced, setExtensionPrompt, extension_prompt_roles } from '../../../../script.js';
+import { eventSource, event_types, saveChatDebounced, saveSettingsDebounced, setExtensionPrompt, extension_prompt_roles } from '../../../../script.js';
 
 const MODULE_NAME = 'rpg_vitals';
 const PROMPT_KEY = 'rpg_vitals_injection';
@@ -51,6 +51,7 @@ const I18N = {
         kind: 'Kind', buff: 'Buff', debuff: 'Debuff', duration: 'Turns', no_effects: 'No active effects.',
         remove: 'Remove', save: 'Save', cancel: 'Cancel', forever: '∞',
         inject_hp: "{{user}}'s HP: {hp}/{max}", inject_effects: 'Active effects', inject_effects_note: 'Let these effects meaningfully shape the scene: each + gives {{user}} a real, fitting advantage and each − a real hindrance in relevant moments (combat, social, physical), without narrating them as on-screen game text',
+        toast_restored: 'Vitals restored from the chat backup.',
         toast_added: 'Effect added.', toast_expired: '{name} wore off.',
         toast_healed: 'Healed +{n} HP.', toast_hurt: '−{n} HP.', toast_need_name: 'Enter an effect name.',
         toast_armor: 'Armor absorbed {n} damage.',
@@ -86,6 +87,7 @@ const I18N = {
         kind: 'Тип', buff: 'Бафф', debuff: 'Дебафф', duration: 'Ходов', no_effects: 'Активных эффектов нет.',
         remove: 'Убрать', save: 'Сохранить', cancel: 'Отмена', forever: '∞',
         inject_hp: 'HP игрока {{user}}: {hp}/{max}', inject_effects: 'Активные эффекты', inject_effects_note: 'Эти эффекты должны реально влиять на сцену: каждый + даёт {{user}} уместное преимущество, а каждый − — реальную помеху в подходящие моменты (бой, общение, физика), не описывая их как игровой текст на экране',
+        toast_restored: 'Показатели восстановлены из резервной копии чата.',
         toast_added: 'Эффект добавлен.', toast_expired: 'Эффект «{name}» прошёл.',
         toast_healed: 'Лечение +{n} HP.', toast_hurt: '−{n} HP.', toast_need_name: 'Введите название эффекта.',
         toast_armor: 'Броня поглотила {n} урона.',
@@ -133,31 +135,84 @@ function saveSettings() {
 }
 
 function freshState() { return { hp: settings.defaultMaxHp || 100, maxHp: settings.defaultMaxHp || 100, buffs: [], hunger: 100, hungerTick: 0, enemies: [], level: 1, xp: 0, mana: 100, fatigue: 0 }; }
-function loadState() {
-    const chatId = getContext().chatId;
-    if (!chatId) { state = freshState(); return; }
+
+// ---- chat ownership: this state belongs to one chat and is never written into another ----
+let currentChatId = null;   // chat the in-memory `state` belongs to
+let pendingChatId = null;   // id reported by CHAT_CHANGED, before the state is (re)loaded
+let stateReady = false;     // false while switching chats; saving is blocked
+
+function cloneState(s) { try { return JSON.parse(JSON.stringify(s)); } catch (e) { return freshState(); } }
+function normalizeState(s) {
+    if (typeof s.hp !== 'number') s.hp = settings.defaultMaxHp || 100;
+    if (typeof s.maxHp !== 'number') s.maxHp = settings.defaultMaxHp || 100;
+    if (!Array.isArray(s.buffs)) s.buffs = [];
+    if (typeof s.hunger !== 'number') s.hunger = 100;
+    if (typeof s.hungerTick !== 'number') s.hungerTick = 0;
+    if (!Array.isArray(s.enemies)) s.enemies = [];
+    if (typeof s.level !== 'number') s.level = 1;
+    if (typeof s.xp !== 'number') s.xp = 0;
+    if (typeof s.mana !== 'number') s.mana = 100;
+    if (typeof s.fatigue !== 'number') s.fatigue = 0;
+    return s;
+}
+
+function loadState(explicitId) {
+    const chatId = explicitId || pendingChatId || getContext().chatId;
+    if (!chatId) { currentChatId = null; pendingChatId = null; stateReady = false; state = freshState(); return; }
+    currentChatId = chatId; pendingChatId = null; stateReady = true;
+
     if (settings.chatStates[chatId]) {
-        state = settings.chatStates[chatId];
-        if (typeof state.hp !== 'number') state.hp = settings.defaultMaxHp || 100;
-        if (typeof state.maxHp !== 'number') state.maxHp = settings.defaultMaxHp || 100;
-        if (!Array.isArray(state.buffs)) state.buffs = [];
-        if (typeof state.hunger !== 'number') state.hunger = 100;
-        if (typeof state.hungerTick !== 'number') state.hungerTick = 0;
-        if (!Array.isArray(state.enemies)) state.enemies = [];
-        if (typeof state.level !== 'number') state.level = 1;
-        if (typeof state.xp !== 'number') state.xp = 0;
-        if (typeof state.mana !== 'number') state.mana = 100;
-        if (typeof state.fatigue !== 'number') state.fatigue = 0;
+        state = normalizeState(settings.chatStates[chatId]);
     } else {
-        state = freshState();
+        // Restore from the backup kept inside the chat. This is what carries HP, effects and level
+        // over when a solo chat is converted to a group: the group gets a new chat id, so chatStates
+        // has no entry for it, but the copied messages still carry the backup.
+        // A chat holding only the greeting is a copy of nothing and is never restored into.
+        const chat = getContext().chat;
+        let restored = false;
+        if (chat && chat.length > 1) {
+            for (let i = chat.length - 1; i >= 0; i--) {
+                const cp = chat[i].extra && chat[i].extra.rpg_vitals_checkpoint;
+                if (cp && typeof cp === 'object') {
+                    state = normalizeState(cloneState(cp));   // copy: never share objects with the chat file
+                    restored = true;
+                    break;
+                }
+            }
+        }
+        if (!restored) state = freshState();
         settings.chatStates[chatId] = state;
+        if (restored) { saveSettings(); toastr.success(t('toast_restored')); }
     }
 }
+
 function saveState() {
-    const chatId = getContext().chatId;
-    if (chatId) settings.chatStates[chatId] = state;
+    if (!stateReady || !currentChatId) return;                 // mid-switch: do not write
+    const ctx = getContext();
+    if (ctx.chatId && ctx.chatId !== currentChatId) return;    // state belongs to a chat we left
+    settings.chatStates[currentChatId] = state;
     saveSettings();
+
+    // Backup inside the chat itself, as a copy. This is what survives a group conversion.
+    try {
+        const chat = ctx.chat;
+        if (chat && chat.length > 0) {
+            const lastMsg = chat[chat.length - 1];
+            if (!lastMsg.extra) lastMsg.extra = {};
+            lastMsg.extra.rpg_vitals_checkpoint = cloneState(state);
+            saveChatDebounced();
+        }
+    } catch (e) { console.error('[Vitals] checkpoint save failed:', e); }
 }
+
+// Ensure the state for the active chat is loaded before it is touched.
+function syncChat() {
+    const id = pendingChatId || getContext().chatId;
+    if (!id) return;
+    if (!stateReady || id !== currentChatId) loadState(id);
+}
+// True while the loaded state still belongs to the active chat. Guards async work.
+function ownsChat(id) { return !!(stateReady && id && currentChatId === id && getContext().chatId === id); }
 
 function clampHp() { state.hp = Math.max(0, Math.min(state.maxHp || 100, Math.round(state.hp))); }
 function clampHunger() { state.hunger = Math.max(0, Math.min(100, Math.round(state.hunger))); }
@@ -320,6 +375,7 @@ function mentionsCare(text) { return CARE_RE.test(String(text || '')); }
 async function analyzeMessage(messageId, opts) {
     opts = opts || {};
     if (!settings.enabled || !settings.autoDetect || !settings.apiKey || !state) return;
+    const myChat = currentChatId;
     const msg = getContext().chat[messageId];
     if (!msg || msg.is_system || !msg.mes) return;
     if (msg.is_user && !opts.selfReport) return; // the normal scan ignores the player's own message
@@ -340,6 +396,7 @@ async function analyzeMessage(messageId, opts) {
 Optionally "add_effects": one short effect if clearly granted (e.g. "Bandaged", "Rested"), else empty.
 Write effect names in ${genLang()}. Output strictly JSON: {"hp_delta":0${settings.hungerEnabled ? ',"satiety_delta":0' : ''}${settings.manaEnabled ? ',"mana_delta":0' : ''}${settings.fatigueEnabled ? ',"fatigue_delta":0' : ''},"add_effects":[]}`;
             const resS = await callAI(sysS, String(msg.mes).slice(0, 1500));
+            if (!ownsChat(myChat)) return;   // chat changed during the request
             if (!resS) return;
             const notesS = [];
             const hd = parseInt(resS.hp_delta);
@@ -380,6 +437,7 @@ Current HP ${state.hp}/${state.maxHp}${hungerInfo}${manaInfo}${fatigueInfo}${lvl
 Write any effect names/descriptions in ${genLang()}.
 Output strictly JSON: {${fields}}`;
         const res = await callAI(sys, String(msg.mes).slice(0, 2000));
+        if (!ownsChat(myChat)) return;   // chat changed during the request
         if (!res) return;
         const notes = [];
         if (typeof res.hp_delta === 'number' && res.hp_delta !== 0) {
@@ -399,6 +457,7 @@ Output strictly JSON: {${fields}}`;
 }
 async function analyzeCombat(messageId) {
     if (!settings.enabled || !settings.combatAuto || !settings.apiKey || !state) return;
+    const myChat = currentChatId;
     const ctx = getContext();
     const msg = ctx.chat[messageId];
     if (!msg || msg.is_user || msg.is_system || !msg.mes) return;
@@ -426,6 +485,7 @@ Rules — everything below is about "${who}" the player, NOT any other character
 Write enemy names in ${genLang()}.
 Output strictly JSON: {"new_enemies":[{"name":"","hp":20,"atk":8}],"hits_on_enemies":[{"name":"","dmg":0}],"damage_to_player":0,"fled":[]}`;
         const res = await callAI(sys, recent);
+        if (!ownsChat(myChat)) return;   // chat changed during the request
         if (!res) return;
         const notes = [];
         for (const e of (Array.isArray(res.new_enemies) ? res.new_enemies : [])) {
@@ -1010,8 +1070,12 @@ jQuery(() => {
     setupUI();
     if (getContext().chatId) { loadState(); renderButton(); buildInjection(); }
 
-    eventSource.on(event_types.CHAT_CHANGED, () => {
-        setTimeout(() => { loadState(); renderButton(); _builtSig = null; renderPanel(); buildInjection(); }, 100);
+    eventSource.on(event_types.CHAT_CHANGED, (chatIdArg) => {
+        // Release the previous chat's state at once: other modules react to this event too, and a
+        // bridge call made before the switch completes must not save into the new chat.
+        stateReady = false; currentChatId = null; pendingChatId = chatIdArg || null;
+        state = freshState();
+        setTimeout(() => { loadState(pendingChatId || getContext().chatId); renderButton(); _builtSig = null; renderPanel(); buildInjection(); }, 100);
     });
     eventSource.on(event_types.MESSAGE_RECEIVED, (id) => onBotMessage(id));
     if (event_types.MESSAGE_SENT) eventSource.on(event_types.MESSAGE_SENT, (id) => onUserMessage(id));
@@ -1024,22 +1088,22 @@ window.RPG = window.RPG || {};
 window.RPG.vitals = {
     available: true,
     isEnabled: () => !!settings.enabled,
-    getHp: () => state ? { hp: state.hp, max: state.maxHp } : null,
-    getHunger: () => state ? state.hunger : null,
-    feed: (n) => state ? feed(n) : 0,
-    heal: (n) => { if (state) heal(n); },
-    damage: (n) => { if (state) damage(n); },
-    setHp: (n, max) => { if (state) setHp(n, max); },
-    addBuff: (b) => state ? addBuff(b) : null,
-    removeBuff: (key) => { if (state) removeBuff(key); },
-    listBuffs: () => state ? state.buffs.map(b => ({ name: b.name, effect: b.effect, kind: b.kind, duration: b.duration })) : [],
-    getMana: () => state ? state.mana : null,
-    setMana: (n) => { if (state) setMana(n); },
-    addMana: (n) => { if (state) addMana(n); },
-    getFatigue: () => state ? state.fatigue : null,
-    setFatigue: (n) => { if (state) setFatigue(n); },
-    addFatigue: (n) => { if (state) addFatigue(n); },
-    getLevel: () => state ? state.level : null,
-    addXp: (n) => { if (state) addXp(n); },
-    refresh: () => { loadState(); _builtSig = null; renderPanel(); buildInjection(); }
+    getHp: () => { syncChat(); return state ? { hp: state.hp, max: state.maxHp } : null; },
+    getHunger: () => { syncChat(); return state ? state.hunger : null; },
+    feed: (n) => { syncChat(); return state ? feed(n) : 0; },
+    heal: (n) => { syncChat(); if (state) heal(n); },
+    damage: (n) => { syncChat(); if (state) damage(n); },
+    setHp: (n, max) => { syncChat(); if (state) setHp(n, max); },
+    addBuff: (b) => { syncChat(); return state ? addBuff(b) : null; },
+    removeBuff: (key) => { syncChat(); if (state) removeBuff(key); },
+    listBuffs: () => { syncChat(); return state ? state.buffs.map(b => ({ name: b.name, effect: b.effect, kind: b.kind, duration: b.duration })) : []; },
+    getMana: () => { syncChat(); return state ? state.mana : null; },
+    setMana: (n) => { syncChat(); if (state) setMana(n); },
+    addMana: (n) => { syncChat(); if (state) addMana(n); },
+    getFatigue: () => { syncChat(); return state ? state.fatigue : null; },
+    setFatigue: (n) => { syncChat(); if (state) setFatigue(n); },
+    addFatigue: (n) => { syncChat(); if (state) addFatigue(n); },
+    getLevel: () => { syncChat(); return state ? state.level : null; },
+    addXp: (n) => { syncChat(); if (state) addXp(n); },
+    refresh: () => { loadState(getContext().chatId); _builtSig = null; renderPanel(); buildInjection(); }
 };

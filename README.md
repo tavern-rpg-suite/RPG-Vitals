@@ -65,6 +65,9 @@ Other modules can affect you through `window.RPG.vitals`: `getHp()`, `heal(n)`, 
 
 ## 🩺 Troubleshooting
 
+- **HP, effects and level reset when a solo chat is converted to a group.** Fixed in 1.10.0. State was stored only under the chat id in `extension_settings`, and a group conversion produces a new chat id, so nothing was found for it. Vitals are now also backed up inside the chat itself (`rpg_vitals_checkpoint` on the last message), the same way the Engine backs up the backpack, so the copied messages carry the state into the group chat. A chat containing only its greeting is never restored from a checkpoint.
+- **State leaking between chats.** Fixed in 1.10.0. The state is owned by a single chat: while SillyTavern swaps chats nothing is saved, and a bridge call made mid-switch can no longer write the previous chat's values under the new chat id.
+
 - **An enemy won't go away.** With auto-combat, removal depends on the model noticing the foe left; the wording now also clears enemies when you clearly escape. If one still lingers, click the **✕** on its card.
 - **Nothing auto-updates.** Auto HP/effects and auto-combat each need a working API URL/key/model; without them, use GM controls.
 - **Double damage in fights.** When auto-combat is on it owns incoming damage, so the HP auto-detect won't also subtract it.
