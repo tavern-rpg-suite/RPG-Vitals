@@ -4,7 +4,7 @@ A SillyTavern extension that gives the player a living **HP bar**, optional **hu
 
 > Part of the RPG suite. It exposes a small bridge (`window.RPG.vitals`) and reads `window.RPG.equipment`, so other modules plug into it — but it works perfectly on its own.
 
-**Version 1.9.6**
+**Version 1.9.8**
 
 ---
 
