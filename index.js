@@ -30,7 +30,8 @@ const defaultSettings = {
     apiKey: '',
     model: 'google/gemma-4-31b-it',
     temperature: 0.4,
-    chatStates: {}
+    chatStates: {},
+    chatStamps: {}   // chatId -> last-used timestamp, lets stale states be pruned
 };
 
 let settings = {};
@@ -128,10 +129,36 @@ function loadSettings() {
     if (!extension_settings[MODULE_NAME]) extension_settings[MODULE_NAME] = {};
     settings = Object.assign({}, defaultSettings, extension_settings[MODULE_NAME]);
     if (!settings.chatStates) settings.chatStates = {};
+    if (!settings.chatStamps) settings.chatStamps = {};
+    // heal NaN/garbage that empty number inputs could have saved
+    if (!Number.isFinite(settings.injectDepth)) settings.injectDepth = defaultSettings.injectDepth;
+    if (settings.combatDepth != null && !Number.isFinite(settings.combatDepth)) settings.combatDepth = defaultSettings.combatDepth;
+    if (!Number.isFinite(settings.defaultMaxHp)) settings.defaultMaxHp = defaultSettings.defaultMaxHp;
 }
 function saveSettings() {
     extension_settings[MODULE_NAME] = settings;
     if (typeof saveSettingsDebounced === 'function') saveSettingsDebounced();
+}
+
+// Per-chat vitals used to live in settings forever, bloating settings.json.
+// States untouched for STATE_TTL days are dropped; they remain recoverable
+// from the rpg_vitals_checkpoint backup written into the chat itself.
+const STATE_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
+function pruneOldStates() {
+    const now = Date.now();
+    let changed = false;
+    for (const id of Object.keys(settings.chatStates)) {
+        if (!settings.chatStamps[id]) { settings.chatStamps[id] = now; changed = true; continue; } // migrate
+        if (now - settings.chatStamps[id] > STATE_TTL_MS) {
+            delete settings.chatStates[id];
+            delete settings.chatStamps[id];
+            changed = true;
+        }
+    }
+    for (const id of Object.keys(settings.chatStamps)) {
+        if (!settings.chatStates[id]) { delete settings.chatStamps[id]; changed = true; }
+    }
+    if (changed) saveSettings();
 }
 
 function freshState() { return { hp: settings.defaultMaxHp || 100, maxHp: settings.defaultMaxHp || 100, buffs: [], hunger: 100, hungerTick: 0, enemies: [], level: 1, xp: 0, mana: 100, fatigue: 0 }; }
@@ -153,6 +180,13 @@ function normalizeState(s) {
     if (typeof s.xp !== 'number') s.xp = 0;
     if (typeof s.mana !== 'number') s.mana = 100;
     if (typeof s.fatigue !== 'number') s.fatigue = 0;
+    // Backfill missing ids (older checkpoints / hand-edited states). Without an
+    // id the GM ✕ button can't remove the buff (removeBuff(undefined) no-ops),
+    // and in-place repaints select rows by data-bid/data-eid.
+    s.buffs = s.buffs.filter(b => b && typeof b === 'object' && b.name);
+    s.buffs.forEach(b => { if (!b.id) b.id = genId(); });
+    s.enemies = s.enemies.filter(e => e && typeof e === 'object' && e.name);
+    s.enemies.forEach(e => { if (!e.id) e.id = genId(); });
     return s;
 }
 
@@ -160,6 +194,8 @@ function loadState(explicitId) {
     const chatId = explicitId || pendingChatId || getContext().chatId;
     if (!chatId) { currentChatId = null; pendingChatId = null; stateReady = false; state = freshState(); return; }
     currentChatId = chatId; pendingChatId = null; stateReady = true;
+    if (!settings.chatStamps) settings.chatStamps = {};
+    settings.chatStamps[chatId] = Date.now();   // touch: keeps this chat's state from being pruned
 
     if (settings.chatStates[chatId]) {
         state = normalizeState(settings.chatStates[chatId]);
@@ -191,6 +227,8 @@ function saveState() {
     const ctx = getContext();
     if (ctx.chatId && ctx.chatId !== currentChatId) return;    // state belongs to a chat we left
     settings.chatStates[currentChatId] = state;
+    if (!settings.chatStamps) settings.chatStamps = {};
+    settings.chatStamps[currentChatId] = Date.now();
     saveSettings();
 
     // Backup inside the chat itself, as a copy. This is what survives a group conversion.
@@ -326,19 +364,20 @@ function attackEnemy(id) {
     const e = state.enemies.find(x => x.id === id); if (!e) return;
     const dmg = playerAttackPower();
     e.hp = Math.max(0, e.hp - dmg);
+    const safeName = escapeHtml(e.name);   // AI-provided name goes into a toast (toastr renders HTML)
     if (e.hp <= 0) {
-        toastr.success(t('toast_hit_enemy', { name: e.name, n: dmg, hp: 0, max: e.max }));
-        toastr.warning(t('toast_enemy_down', { name: e.name }));
+        toastr.success(t('toast_hit_enemy', { name: safeName, n: dmg, hp: 0, max: e.max }));
+        toastr.warning(t('toast_enemy_down', { name: safeName }));
         gainKillXp(e);
         state.enemies = state.enemies.filter(x => x.id !== id);
     } else {
-        toastr.info(t('toast_hit_enemy', { name: e.name, n: dmg, hp: e.hp, max: e.max }));
+        toastr.info(t('toast_hit_enemy', { name: safeName, n: dmg, hp: e.hp, max: e.max }));
     }
     saveState(); renderPanel(); buildInjection();
 }
 function enemyHitsYou(id) {
     const e = state.enemies.find(x => x.id === id); if (!e) return;
-    toastr.warning(t('toast_enemy_hit', { name: e.name, n: e.atk || 0 }));
+    toastr.warning(t('toast_enemy_hit', { name: escapeHtml(e.name), n: e.atk || 0 }));
     damage(e.atk || 0); // armour from equipment soaks part of it inside damage()
 }
 
@@ -407,7 +446,7 @@ Write effect names in ${genLang()}. Output strictly JSON: {"hp_delta":0${setting
             if (settings.manaEnabled && md > 0) { addMana(md); notesS.push(`${t('lbl_mana')} +${md}`); }
             const fd = parseInt(resS.fatigue_delta);
             if (settings.fatigueEnabled && fd < 0) { addFatigue(fd); notesS.push(`${t('lbl_fatigue')} ${fd}`); }
-            for (const e of (Array.isArray(resS.add_effects) ? resS.add_effects : [])) if (e && e.name) { addBuff(e); notesS.push('+' + e.name); }
+            for (const e of (Array.isArray(resS.add_effects) ? resS.add_effects : [])) if (e && e.name) { addBuff(e); notesS.push('+' + escapeHtml(e.name)); }
             if (notesS.length) toastr.info(t('auto_changed') + ' ' + notesS.join(', '));
         } catch (e) { /* silent */ } finally { vitalsBusy = false; }
         return;
@@ -450,7 +489,7 @@ Output strictly JSON: {${fields}}`;
         if (settings.manaEnabled && typeof res.mana_delta === 'number' && res.mana_delta !== 0) { addMana(res.mana_delta); notes.push(`${t('mana_word')} ${res.mana_delta > 0 ? '+' : ''}${res.mana_delta}`); }
         if (settings.fatigueEnabled && typeof res.fatigue_delta === 'number' && res.fatigue_delta !== 0) { addFatigue(res.fatigue_delta); notes.push(`${t('fatigue_word')} ${res.fatigue_delta > 0 ? '+' : ''}${res.fatigue_delta}`); }
         if (settings.levelEnabled && typeof res.xp_delta === 'number' && res.xp_delta > 0) { addXp(res.xp_delta); notes.push(`${t('xp')} +${res.xp_delta}`); }
-        for (const e of (Array.isArray(res.add_effects) ? res.add_effects : [])) if (e && e.name) { addBuff(e); notes.push((e.kind === 'debuff' ? '−' : '+') + e.name); }
+        for (const e of (Array.isArray(res.add_effects) ? res.add_effects : [])) if (e && e.name) { addBuff(e); notes.push((e.kind === 'debuff' ? '−' : '+') + escapeHtml(e.name)); }
         for (const nm of (Array.isArray(res.remove_effects) ? res.remove_effects : [])) { const b = state.buffs.find(x => x.name === nm); if (b) removeBuff(b.id); }
         if (notes.length) toastr.info(t('auto_changed') + ' ' + notes.join(', '));
     } catch (e) { /* silent: don't disrupt chat on API errors */ } finally { vitalsBusy = false; }
@@ -490,7 +529,7 @@ Output strictly JSON: {"new_enemies":[{"name":"","hp":20,"atk":8}],"hits_on_enem
         const notes = [];
         for (const e of (Array.isArray(res.new_enemies) ? res.new_enemies : [])) {
             if (e && e.name && !state.enemies.some(x => x.name.toLowerCase() === String(e.name).toLowerCase())) {
-                addEnemy(e.name, e.hp, e.atk); notes.push(t('c_appears', { name: e.name }));
+                addEnemy(e.name, e.hp, e.atk); notes.push(t('c_appears', { name: escapeHtml(e.name) }));
             }
         }
         for (const h of (Array.isArray(res.hits_on_enemies) ? res.hits_on_enemies : [])) {
@@ -498,13 +537,13 @@ Output strictly JSON: {"new_enemies":[{"name":"","hp":20,"atk":8}],"hits_on_enem
             const e = state.enemies.find(x => x.name.toLowerCase() === String(h.name).toLowerCase());
             if (!e) continue;
             e.hp = Math.max(0, e.hp - Math.round(h.dmg));
-            if (e.hp <= 0) { gainKillXp(e); state.enemies = state.enemies.filter(x => x.id !== e.id); notes.push(t('c_down', { name: e.name })); }
-            else notes.push(t('c_hit', { name: e.name, n: Math.round(h.dmg) }));
+            if (e.hp <= 0) { gainKillXp(e); state.enemies = state.enemies.filter(x => x.id !== e.id); notes.push(t('c_down', { name: escapeHtml(e.name) })); }
+            else notes.push(t('c_hit', { name: escapeHtml(e.name), n: Math.round(h.dmg) }));
         }
         for (const nm of (Array.isArray(res.fled) ? res.fled : [])) {
             const before = state.enemies.length;
             state.enemies = state.enemies.filter(x => x.name.toLowerCase() !== String(nm).toLowerCase());
-            if (state.enemies.length < before) notes.push(t('c_fled', { name: nm }));
+            if (state.enemies.length < before) notes.push(t('c_fled', { name: escapeHtml(nm) }));
         }
         // incoming damage goes through armour (mitigation + wear handled inside damage())
         if (typeof res.damage_to_player === 'number' && res.damage_to_player > 0) {
@@ -518,11 +557,11 @@ function tickBuffs(messageId) {
     if (!settings.enabled || !state) return;
     const msg = getContext().chat[messageId];
     if (!msg || msg.is_user || msg.is_system) return;
-    let expired = null;
+    const expired = [];   // collect ALL that wore off this tick, not just the last one
     state.buffs = state.buffs.filter(b => {
         if (b.duration == null) return true;
         b.duration -= 1;
-        if (b.duration <= 0) { expired = b.name; return false; }
+        if (b.duration <= 0) { expired.push(b.name); return false; }
         return true;
     });
     // hunger drain by bot messages
@@ -540,13 +579,14 @@ function tickBuffs(messageId) {
         }
     }
     saveState(); renderPanel(); buildInjection();
-    if (expired) toastr.info(t('toast_expired', { name: expired }));
+    for (const name of expired) toastr.info(t('toast_expired', { name: escapeHtml(name) }));
 }
 
 // A bot turn's consequences (buff ticks, hunger drain, AI HP/effect/combat analysis) must apply
 // EXACTLY ONCE per message. Swiping or regenerating re-fires MESSAGE_RECEIVED for the same message,
 // which previously stacked every change again. A per-message marker makes it idempotent.
 function onBotMessage(id) {
+    syncChat();   // tick/analyze against the chat the message actually belongs to
     const msg = getContext().chat[id];
     if (!msg || msg.is_user || msg.is_system) return;
     if (msg.rpg_vitals_done === true) return; // already handled — this fire is a swipe / regen
@@ -556,6 +596,7 @@ function onBotMessage(id) {
     analyzeCombat(id);
 }
 function onUserMessage(id) {
+    syncChat();
     const msg = getContext().chat[id];
     if (!msg || msg.rpg_vitals_self_done === true) return;
     if (msg) msg.rpg_vitals_self_done = true;
@@ -632,7 +673,9 @@ function renderButton() {
                 <div class="rpg-vit-body" id="rpg-vit-body"></div>
             </div>`);
         makeModalDraggable(document.getElementById('rpg-vit-modal'), document.getElementById('rpg-vit-drag'));
-        $('#rpg-vit-modal .rpg-modal-close').on('click', () => $('#rpg-vit-modal').removeClass('visible'));
+        // Delegated + namespaced: a direct element binding here used to be stripped
+        // by sibling extensions doing a blanket $('.rpg-modal-close').off('click').
+        $(document).off('click.rpgVitClose').on('click.rpgVitClose', '#rpg-vit-modal .rpg-modal-close', () => $('#rpg-vit-modal').removeClass('visible'));
         window.addEventListener('resize', () => { if ($('#rpg-vit-modal').hasClass('visible')) fitCard(); });
     }
     if (!settings.enabled) { $('#rpg-vit-btn').hide(); return; }
@@ -1044,7 +1087,7 @@ function setupUI() {
         renderPanel(); buildInjection();
     });
     $('#rpg-vit-maxhp').val(settings.defaultMaxHp).on('change', function () { settings.defaultMaxHp = Math.max(1, parseInt($(this).val()) || 100); saveSettings(); });
-    $('#rpg-vit-depth').val(settings.injectDepth).on('change', function () { settings.injectDepth = parseInt($(this).val()); saveSettings(); buildInjection(); });
+    $('#rpg-vit-depth').val(settings.injectDepth).on('change', function () { settings.injectDepth = Math.max(0, parseInt($(this).val()) || 0); $(this).val(settings.injectDepth); saveSettings(); buildInjection(); });
     $('#rpg-vit-hunger-en').prop('checked', !!settings.hungerEnabled).on('change', function () { settings.hungerEnabled = this.checked; saveSettings(); renderPanel(); buildInjection(); });
     $('#rpg-vit-hunger-every').val(settings.hungerDrainEvery).on('change', function () { settings.hungerDrainEvery = Math.max(1, parseInt($(this).val()) || 3); saveSettings(); });
     $('#rpg-vit-hunger-amt').val(settings.hungerDrainAmount).on('change', function () { settings.hungerDrainAmount = Math.max(1, parseInt($(this).val()) || 5); saveSettings(); });
@@ -1067,6 +1110,7 @@ function setupUI() {
 
 jQuery(() => {
     loadSettings();
+    pruneOldStates();
     setupUI();
     if (getContext().chatId) { loadState(); renderButton(); buildInjection(); }
 
