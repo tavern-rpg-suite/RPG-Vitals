@@ -360,8 +360,45 @@ function addEnemy(name, hp, atk) {
     return e;
 }
 function removeEnemy(id) { state.enemies = state.enemies.filter(e => e.id !== id); saveState(); renderPanel(); buildInjection(); }
+// "Soldier 1", "Soldier 2"… share a stem — the model numbers them because names must be
+// unique. Group them for display and for the injection; individuals stay underneath.
+function enemyStem(name) { return String(name || '').replace(/\s*[#№]?\d+$/, '').trim().toLowerCase(); }
+function groupedEnemies() {
+    const groups = [];
+    const byStem = {};
+    for (const e of state.enemies) {
+        const k = enemyStem(e.name) || e.name.toLowerCase();
+        if (!byStem[k]) { byStem[k] = { stem: k, members: [] }; groups.push(byStem[k]); }
+        byStem[k].members.push(e);
+    }
+    return groups.map(g => {
+        const first = g.members[0];
+        const label = g.members.length > 1
+            ? `${String(first.name).replace(/\s*[#№]?\d+$/, '').trim()} ×${g.members.length}`
+            : first.name;
+        return {
+            label,
+            repId: first.id,
+            count: g.members.length,
+            hp: g.members.reduce((a, e) => a + e.hp, 0),
+            max: g.members.reduce((a, e) => a + (e.max || 0), 0),
+            atk: first.atk,
+            members: g.members
+        };
+    });
+}
+function groupOf(repId) {
+    const e = state.enemies.find(x => x.id === repId); if (!e) return [];
+    const k = enemyStem(e.name) || e.name.toLowerCase();
+    return state.enemies.filter(x => (enemyStem(x.name) || x.name.toLowerCase()) === k);
+}
+
 function attackEnemy(id) {
-    const e = state.enemies.find(x => x.id === id); if (!e) return;
+    // attacking a group hits its weakest member — kills finish cleanly, the ×N shrinks
+    const g = groupOf(id);
+    const e = g.length ? g.reduce((a, b) => (a.hp <= b.hp ? a : b)) : state.enemies.find(x => x.id === id);
+    if (!e) return;
+    id = e.id;
     const dmg = playerAttackPower();
     e.hp = Math.max(0, e.hp - dmg);
     const safeName = escapeHtml(e.name);   // AI-provided name goes into a toast (toastr renders HTML)
@@ -464,7 +501,7 @@ Write effect names in ${genLang()}. Output strictly JSON: {"hp_delta":0${setting
 
         // build the JSON schema + rules only for the enabled optional stats
         let fields = '"hp_delta":0,"add_effects":[{"name":"","effect":"","kind":"buff","duration":3}],"remove_effects":[]';
-        let rules = '';
+        let rules = `\n- "hp_delta": negative if "${getContext().name1 || 'the player'}" got physically HURT this message (a scratch ~3-8, a solid wound ~10-25, a grave injury ~30-45), positive if they actually healed (bandage ~5-15, treatment/rest ~15-35). 0 if neither.`;
         if (settings.hungerEnabled) { fields += ',"satiety_delta":0'; rules += `\n- "satiety_delta": +N when "${who}" EATS or DRINKS this message (fuller: a snack ~10, a meal ~30, a drink ~5-15). Eating or drinking is ALWAYS positive. Use a negative number ONLY if the text explicitly shows a long stretch with no food at all. Otherwise 0.`; }
         if (settings.manaEnabled) { fields += ',"mana_delta":0'; rules += `\n- "mana_delta": mana "${who}" spent (negative, e.g. casting/using magic) or recovered (positive, e.g. rest/potion/meditation) THIS message.`; }
         if (settings.fatigueEnabled) { fields += ',"fatigue_delta":0'; rules += `\n- "fatigue_delta": how much MORE tired "${who}" got (positive: hard exertion, fighting, sprinting, no sleep) or how much they recovered (negative: rest/sleep) THIS message.`; }
@@ -481,7 +518,10 @@ Output strictly JSON: {${fields}}`;
         const notes = [];
         if (typeof res.hp_delta === 'number' && res.hp_delta !== 0) {
             let hpd = res.hp_delta;
-            if (hpd < 0 && settings.combatAuto) hpd = 0; // combat scan owns incoming damage — avoid double-subtracting
+            // skip narrative damage ONLY when the combat scan already subtracted damage for
+            // this very message; otherwise story wounds (traps, falls, ambush narration)
+            // never reached HP at all with combatAuto on
+            if (hpd < 0 && settings.combatAuto && opts && opts.combatDmg > 0) hpd = 0;
             if (hpd > 0) { heal(hpd); notes.push(`HP +${hpd}`); }
             else if (hpd < 0) { damage(-hpd); notes.push(`HP ${hpd}`); }
         }
@@ -495,11 +535,11 @@ Output strictly JSON: {${fields}}`;
     } catch (e) { /* silent: don't disrupt chat on API errors */ } finally { vitalsBusy = false; }
 }
 async function analyzeCombat(messageId) {
-    if (!settings.enabled || !settings.combatAuto || !settings.apiKey || !state) return;
+    if (!settings.enabled || !settings.combatAuto || !settings.apiKey || !state) return 0;
     const myChat = currentChatId;
     const ctx = getContext();
     const msg = ctx.chat[messageId];
-    if (!msg || msg.is_user || msg.is_system || !msg.mes) return;
+    if (!msg || msg.is_user || msg.is_system || !msg.mes) return 0;
     try {
         // feed the last N messages so the model has the flow of the fight
         const n = Math.max(1, Math.min(10, settings.combatScanMsgs || 4));
@@ -524,8 +564,8 @@ Rules — everything below is about "${who}" the player, NOT any other character
 Write enemy names in ${genLang()}.
 Output strictly JSON: {"new_enemies":[{"name":"","hp":20,"atk":8}],"hits_on_enemies":[{"name":"","dmg":0}],"damage_to_player":0,"fled":[]}`;
         const res = await callAI(sys, recent);
-        if (!ownsChat(myChat)) return;   // chat changed during the request
-        if (!res) return;
+        if (!ownsChat(myChat)) return 0;   // chat changed during the request
+        if (!res) return 0;
         const notes = [];
         for (const e of (Array.isArray(res.new_enemies) ? res.new_enemies : [])) {
             if (e && e.name && !state.enemies.some(x => x.name.toLowerCase() === String(e.name).toLowerCase())) {
@@ -546,12 +586,16 @@ Output strictly JSON: {"new_enemies":[{"name":"","hp":20,"atk":8}],"hits_on_enem
             if (state.enemies.length < before) notes.push(t('c_fled', { name: escapeHtml(nm) }));
         }
         // incoming damage goes through armour (mitigation + wear handled inside damage())
+        let dmgApplied = 0;
         if (typeof res.damage_to_player === 'number' && res.damage_to_player > 0) {
-            damage(res.damage_to_player);
+            dmgApplied = Math.round(res.damage_to_player);
+            damage(dmgApplied);
         }
         saveState(); renderPanel(); buildInjection();
         if (notes.length) toastr.info(t('combat_changed') + ' ' + notes.join(', '));
+        return dmgApplied;   // lets the narrative scan know combat already took this message's damage
     } catch (e) { /* silent: never disrupt chat on API errors */ }
+    return 0;
 }
 function tickBuffs(messageId) {
     if (!settings.enabled || !state) return;
@@ -592,8 +636,10 @@ function onBotMessage(id) {
     if (msg.rpg_vitals_done === true) return; // already handled — this fire is a swipe / regen
     msg.rpg_vitals_done = true;               // mark up-front so re-entrant fires are ignored too
     tickBuffs(id);
-    analyzeMessage(id);
-    analyzeCombat(id);
+    // combat first: the narrative scan then only skips damage that combat ALREADY took.
+    // Previously combatAuto discarded ALL narrative damage — a story wound outside a
+    // tracked fight (a trap, a fall, an ambush) left HP untouched ("wounded at HP 99").
+    analyzeCombat(id).then(dmg => analyzeMessage(id, { combatDmg: dmg || 0 })).catch(() => analyzeMessage(id));
 }
 function onUserMessage(id) {
     syncChat();
@@ -631,7 +677,7 @@ function buildInjection() {
     // combat — only when there are enemies, and only if the user opted in
     let combatText = '';
     if (settings.combatInject && Array.isArray(state.enemies) && state.enemies.length) {
-        const list = state.enemies.map(e => `${e.name} ${e.hp}/${e.max}`).join(', ');
+        const list = groupedEnemies().map(g => `${g.label} ${g.hp}/${g.max}`).join(', ');
         let weapon = t('inj_unarmed');
         try {
             const eq = (window.RPG && window.RPG.equipment && window.RPG.equipment.available) ? window.RPG.equipment : null;
@@ -716,7 +762,7 @@ function structSig() {
     if (!state) return 'none';
     const flat = (state.hp / (state.maxHp || 100)) <= 0;
     const buffs = state.buffs.map(b => `${b.id}:${b.kind === 'debuff' ? 'd' : 'b'}:${b.duration == null ? 'x' : 'n'}:${b.effect ? 'e' : ''}`).join(',');
-    const enemies = state.enemies.map(e => e.id).join(',');
+    const enemies = state.enemies.map(e => `${e.id}:${e.hp}/${e.max}`).join(',');   // grouped rows aggregate hp — any change rebuilds
     return [
         settings.language, !!settings.gmControls, !!settings.hungerEnabled, !!settings.manaEnabled,
         !!settings.fatigueEnabled, !!settings.levelEnabled, flat,
@@ -883,14 +929,14 @@ function buildPanel() {
         </div>` : '';
 
     const combatBlock = (gm || state.enemies.length) ? `<div class="vex-section">${escapeHtml(t('combat'))}</div>
-        ${state.enemies.length ? state.enemies.map(e => {
-            const epct = Math.max(0, Math.min(100, Math.round(e.hp / (e.max || 1) * 100)));
-            return `<div class="vex-enemy" data-eid="${e.id}">
-                <div class="rpg-vit-hp-top"><span class="rpg-vit-b-name">${escapeHtml(e.name)}</span><span class="rpg-vit-hp-num"><span class="js-e-hp">${e.hp}/${e.max}${e.atk ? ` · ${escapeHtml(t('enemy_atk_ph'))} ${e.atk}` : ''}</span> <i class="fa-solid fa-xmark rpg-vit-e-del" data-id="${e.id}" title="${escapeHtml(t('remove'))}" style="cursor:pointer;color:var(--sepia);margin-left:6px;"></i></span></div>
+        ${state.enemies.length ? groupedEnemies().map(g => {
+            const epct = Math.max(0, Math.min(100, Math.round(g.hp / (g.max || 1) * 100)));
+            return `<div class="vex-enemy" data-eid="${g.repId}">
+                <div class="rpg-vit-hp-top"><span class="rpg-vit-b-name">${escapeHtml(g.label)}</span><span class="rpg-vit-hp-num"><span class="js-e-hp">${g.hp}/${g.max}${g.atk ? ` · ${escapeHtml(t('enemy_atk_ph'))} ${g.atk}` : ''}</span> <i class="fa-solid fa-xmark rpg-vit-e-del" data-id="${g.repId}" title="${escapeHtml(t('remove'))}" style="cursor:pointer;color:var(--sepia);margin-left:6px;"></i></span></div>
                 <div class="rpg-vit-bar-wrap"><div class="rpg-vit-bar" style="width:${epct}%; background:#b0432f;"></div></div>
                 ${gm ? `<div class="vex-ctrl">
-                    <button class="rpg-vit-btn ok rpg-vit-atk" data-id="${e.id}"><i class="fa-solid fa-gavel"></i> ${escapeHtml(t('attack'))}</button>
-                    <button class="rpg-vit-btn danger rpg-vit-ehit" data-id="${e.id}"><i class="fa-solid fa-burst"></i> ${escapeHtml(t('enemy_hit'))}</button>
+                    <button class="rpg-vit-btn ok rpg-vit-atk" data-id="${g.repId}"><i class="fa-solid fa-gavel"></i> ${escapeHtml(t('attack'))}</button>
+                    <button class="rpg-vit-btn danger rpg-vit-ehit" data-id="${g.repId}"><i class="fa-solid fa-burst"></i> ${escapeHtml(t('enemy_hit'))}</button>
                 </div>` : ''}
             </div>`;
         }).join('') : `<div class="vex-eff-note">${escapeHtml(t('no_enemies'))}</div>`}
@@ -963,7 +1009,9 @@ function buildPanel() {
     });
     body.find('.rpg-vit-atk').off('click').on('click', function () { attackEnemy($(this).data('id')); });
     body.find('.rpg-vit-ehit').off('click').on('click', function () { enemyHitsYou($(this).data('id')); });
-    body.find('.rpg-vit-e-del').off('click').on('click', function () { removeEnemy($(this).data('id')); });
+    body.find('.rpg-vit-e-del').off('click').on('click', function () {
+        groupOf($(this).data('id')).forEach(e => removeEnemy(e.id));   // ✕ clears the whole stack
+    });
     body.find('.rpg-vit-e-add').off('click').on('click', function () {
         const name = body.find('.rpg-vit-e-name').val().trim();
         if (!name) { toastr.warning(t('toast_need_ename')); return; }
