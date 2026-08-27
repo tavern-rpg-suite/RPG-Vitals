@@ -126,14 +126,32 @@
         repeating-linear-gradient(0deg,transparent 0 11px,rgba(63,90,28,.1) 11px 12px); }
 #rpg-vit-body .vex-ecg svg { position:absolute; inset:0; width:100%; height:100%; }
 #rpg-vit-body .vex-ecg .base { fill:none; stroke:var(--hp); stroke-width:1.4; opacity:.28; }
+/* The line is marked pathLength="1", so its dash offset advances evenly across the
+   whole trace. The dot travels by offset-distance, which is a percentage of the path's
+   REAL length — and the real length is 477 units against 300 of horizontal span,
+   because the spikes add nearly sixty percent. The two therefore agreed on the flat
+   stretches and drifted apart on every peak, which is exactly where it was visible.
+
+   Removing pathLength makes the line measure itself the same way the dot does, so both
+   are now driven by true distance along the path. The dash values are scaled from the
+   old fractions of 1 to the same fractions of 477. */
 #rpg-vit-body .vex-ecg .live { fill:none; stroke-width:2.1; stroke-linejoin:round; stroke-linecap:round;
-    stroke-dasharray:.22 .78; animation:vex-trace 2.2s linear infinite; }
-@keyframes vex-trace { from{stroke-dashoffset:.22;} to{stroke-dashoffset:-.78;} }
-#rpg-vit-body .vex-blip { position:absolute; top:0; left:0; width:7px; height:7px; margin:-3.5px 0 0 -3.5px; border-radius:50%;
-    box-shadow:0 0 7px 2px rgba(123,191,58,.7);
-    offset-path:path("M0 23 H56 L62 23 L67 9 L72 38 L77 14 L82 23 H120 L126 23 L131 9 L136 38 L141 14 L146 23 H200 L206 23 L211 9 L216 38 L221 14 L226 23 H300");
-    animation:vex-blip 2.2s linear infinite; }
-@keyframes vex-blip { from{offset-distance:0%;} to{offset-distance:100%;} }
+    stroke-dasharray:105 372; animation:vex-trace 2.2s linear infinite; }
+@keyframes vex-trace { from{stroke-dashoffset:105;} to{stroke-dashoffset:-372;} }
+/* The dot used to be an HTML element walking an offset-path written in literal
+   pixels — a 300-wide path. The trace next to it is an SVG with preserveAspectRatio
+   "none", so it stretches to whatever width the panel happens to be. The two were
+   therefore travelling different distances in the same 2.2 seconds, and the dot ran
+   ahead or fell behind depending on how wide the window was.
+
+   It is now drawn INSIDE the svg, as a zero-length dash with a round cap on a copy of
+   the same path. Same coordinate system, same units, same dash mechanism as the trace
+   — they cannot drift apart, whatever the panel is scaled to. */
+#rpg-vit-body .vex-ecg .blip { fill:none; stroke-width:7; stroke-linecap:round;
+    stroke-dasharray:0.01 477.31; animation:vex-blip 2.2s linear infinite; }
+/* Offset chosen so the dot sits exactly on the leading edge of the trace: the trace's
+   front is at (105 - offset), the dot at -offset, so the dot's offset trails by 105. */
+@keyframes vex-blip { from{stroke-dashoffset:0;} to{stroke-dashoffset:-477.31;} }
 
 #rpg-vit-body .vex-cells { display:flex; gap:3px; height:18px; }
 #rpg-vit-body .vex-cells i { flex:1; border-radius:2px; background:#d8c8a0; border:1px solid var(--edge); position:relative; overflow:hidden; }

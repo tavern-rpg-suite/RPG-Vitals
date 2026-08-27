@@ -797,22 +797,85 @@ function renderButton() {
     $('#rpg-vit-btn').off('click').on('click', () => { _builtSig = null; renderPanel(); $('#rpg-vit-modal').toggleClass('visible'); });
 }
 function makeModalDraggable(elmnt, handle) {
-    let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
     if (!handle) return;
     handle.onmousedown = (e) => {
         if (e.target.closest('.rpg-modal-close, .vex-close, button, input, select, .vex-b-del, .rpg-vit-e-del')) return;
-        e.preventDefault(); p3 = e.clientX; p4 = e.clientY;
-        document.onmouseup = () => { document.onmouseup = null; document.onmousemove = null; };
-        document.onmousemove = (ev) => {
-            ev.preventDefault(); p1 = p3 - ev.clientX; p2 = p4 - ev.clientY; p3 = ev.clientX; p4 = ev.clientY;
-            elmnt.style.top = (elmnt.offsetTop - p2) + 'px'; elmnt.style.left = (elmnt.offsetLeft - p1) + 'px';
+        e.preventDefault();
+
+        /* Remember how far the pointer is from the window's corner and keep that
+           distance for the whole drag. transform is deliberately left alone — the
+           opening animation and the fit-to-width scaling both use it, and writing
+           there as well makes them fight and the window drift.
+
+           Layout is measured once here, never during the drag, and the writes are
+           batched into a single animation frame. */
+        const rect = elmnt.getBoundingClientRect();
+        const shiftX = e.clientX - rect.left;
+        const shiftY = e.clientY - rect.top;
+
+        let x = rect.left, y = rect.top, queued = false;
+
+        const paint = () => {
+            queued = false;
+            elmnt.style.left = x + 'px';
+            elmnt.style.top = y + 'px';
         };
+
+        elmnt.style.left = rect.left + 'px';
+        elmnt.style.top = rect.top + 'px';
+
+        const onMove = (ev) => {
+            ev.preventDefault();
+            x = ev.clientX - shiftX;
+            y = ev.clientY - shiftY;
+            if (!queued) { queued = true; requestAnimationFrame(paint); }
+        };
+
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            paint();
+        };
+
+        document.addEventListener('mousemove', onMove, { passive: false });
+        document.addEventListener('mouseup', onUp);
     };
 }
 
 // Dispatcher: full rebuild only when the panel's STRUCTURE changes; otherwise repaint values in
 // place so routine stat updates don't tear down the DOM (which caused the panel to "jump"/flicker
 // and restarted the ECG/pulse animations every time).
+/* Every action rebuilds the panel, and the panel scrolls — both the body and the
+   list of effects. Nothing remembered where they were, so changing one number threw
+   you back to the top. Taken before a redraw, put back after. */
+const VIT_SCROLL = ['.rpg-vit-body', '.vex-efflist'];
+
+function grabVitScroll() {
+    const out = [];
+    try {
+        const root = document.getElementById('rpg-vit-modal');
+        if (!root) return out;
+        VIT_SCROLL.forEach(sel => {
+            root.querySelectorAll(sel).forEach((el, i) => {
+                if (el.scrollTop > 0) out.push({ sel, i, top: el.scrollTop });
+            });
+        });
+    } catch (e) { /* never let this break a redraw */ }
+    return out;
+}
+
+function restoreVitScroll(saved) {
+    if (!saved || !saved.length) return;
+    try {
+        const root = document.getElementById('rpg-vit-modal');
+        if (!root) return;
+        saved.forEach(sv => {
+            const el = root.querySelectorAll(sv.sel)[sv.i];
+            if (el) el.scrollTop = sv.top;      // a shorter list is clamped by the browser
+        });
+    } catch (e) { /* same */ }
+}
+
 function renderPanel() {
     const bodyEl = document.getElementById('rpg-vit-body');
     if (!bodyEl || !state) return;
@@ -918,9 +981,13 @@ function buildPanel() {
     const ecg = `<div class="vex-ecg">
         <svg viewBox="0 0 300 46" preserveAspectRatio="none">
             <path class="base" d="${ecgPath}"/>
-            <path class="live" pathLength="1" style="stroke:${hpc};" d="${ecgPath}"/>
+            <!-- No pathLength: it made the dash animation measure the trace evenly,
+                 while the dot travels by true distance along the same path. The spikes
+                 make the real path about sixty percent longer than its width, so the
+                 two agreed on the flat parts and separated on every peak. -->
+            <path class="live" style="stroke:${hpc};" d="${ecgPath}"/>
+            ${flat ? '' : `<path class="blip" style="stroke:${hpc};" d="${ecgPath}"/>`}
         </svg>
-        ${flat ? '' : `<span class="vex-blip" style="background:${hpc};"></span>`}
     </div>`;
 
     // satiety ration cells
@@ -1015,6 +1082,8 @@ function buildPanel() {
             <button class="rpg-vit-btn ok rpg-vit-e-add"><i class="fa-solid fa-plus"></i> ${escapeHtml(t('add_enemy'))}</button>
         </div></div>` : ''}` : '';
 
+    const keepScroll = grabVitScroll();
+
     body.html(`<div class="vex-fit"><div class="vex${settings.gmControls ? ' gm' : ''}">
         <span class="vex-clip"></span>
         <div class="vex-hang"><span class="str"></span><div class="tag"><b>${escapeHtml(t('exam_b'))}</b><i>${escapeHtml(t('exam_i'))}</i></div></div>
@@ -1088,6 +1157,9 @@ function buildPanel() {
 
     $('#rpg-vit-modal').toggleClass('vex-wide', !!settings.gmControls);
     fitCard();
+    // After fitCard, because that is what settles the final heights — restoring before
+    // it would be clamped against a layout that is about to change.
+    restoreVitScroll(keepScroll);
     const dragEl = body.find('#vex-drag')[0];
     if (dragEl) makeModalDraggable(document.getElementById('rpg-vit-modal'), dragEl);
 }
@@ -1098,14 +1170,22 @@ function fitCard() {
     if (!fit || !card) return;
     // Only downscale for narrow WIDTH (small screens). Never scale by height —
     // a tall card scrolls inside the panel instead of being squished.
-    fit.style.transform = 'none';
-    fit.style.height = 'auto';
-    const cardW = card.offsetWidth || 372;
+    // Resetting the transform and the height first made the browser lay the card out
+    // unscaled, and that intermediate state is painted — the panel jumps to full size
+    // and back on every redraw. Measuring before anything is written keeps it to one
+    // invisible change. getBoundingClientRect reports the SCALED size, so the previous
+    // scale is divided back out to recover the natural one.
+    const prev = fit.dataset.scale ? parseFloat(fit.dataset.scale) : 1;
+    const cardRect = card.getBoundingClientRect();
+    const cardW = (cardRect.width / (prev || 1)) || 372;
+    const cardH = cardRect.height / (prev || 1);
+
     const availW = Math.min(cardW + 8, window.innerWidth * 0.96) - 4;
     const s = Math.min(1, availW / cardW);
     fit.style.transformOrigin = 'top center';
     fit.style.transform = 'scale(' + s + ')';
-    if (s < 1) fit.style.height = (card.offsetHeight * s + 30) + 'px';
+    fit.style.height = s < 1 ? (cardH * s + 30) + 'px' : 'auto';
+    fit.dataset.scale = String(s);
 }
 
 
