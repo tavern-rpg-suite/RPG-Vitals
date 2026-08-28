@@ -119,10 +119,47 @@ const I18N = {
         set_fatigue: 'Включить усталость (растёт от нагрузки, падает при отдыхе)'
     }
 };
+/* {{user}} appears in eight strings — in the prompt injections and in two of the
+   notifications — and nothing ever replaced it, so the model and the player both saw
+   the literal braces. Substituted here because every string in the extension passes
+   through this one function, prompt and interface alike. */
+/* Names are escaped before they go into a notification, but toastr shows them as
+   text — so an apostrophe arrived as "&#39;" and stayed that way. Escaping is still
+   right for anything that lands in the panel's markup; this decodes on the way out. */
+function unesc(v) {
+    return String(v ?? '')
+        .replace(/&#0?39;/g, "'").replace(/&apos;/g, "'")
+        .replace(/&quot;/g, '"')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&#x2F;/gi, '/')
+        .replace(/&amp;/g, '&');   // last, or the ampersands of the others come back
+}
+
+(function () {
+    if (!window.toastr || window.toastr.__vitUnesc) return;
+    ['success', 'info', 'warning', 'error'].forEach(k => {
+        const orig = toastr[k];
+        if (typeof orig !== 'function') return;
+        toastr[k] = function (msg, title, opts) {
+            return orig.call(toastr, unesc(msg), title === undefined ? title : unesc(title), opts);
+        };
+    });
+    window.toastr.__vitUnesc = true;
+})();
+
+function playerName() {
+    try {
+        const ctx = getContext();
+        return ctx?.name1 || (typeof window !== 'undefined' && window.name1) || 'User';
+    } catch (e) { return 'User'; }
+}
+
 function t(key, vars) {
     const lang = settings.language === 'ru' ? 'ru' : 'en';
     let str = (I18N[lang] && I18N[lang][key] !== undefined) ? I18N[lang][key] : (I18N.en[key] !== undefined ? I18N.en[key] : key);
     if (vars) for (const k in vars) str = str.split('{' + k + '}').join(vars[k]);
+    // Last, so a value passed in through vars cannot smuggle the macro back in.
+    if (str.indexOf('{{user}}') !== -1) str = str.split('{{user}}').join(playerName());
     return str;
 }
 
