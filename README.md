@@ -21,6 +21,18 @@ A SillyTavern extension that gives the player a living **HP bar**, optional **hu
 - 🛡️ **Equipment aware** — if the Equipment module is present, your weapon sets your attack and armor soaks part of incoming damage.
 - 🌍 **Bilingual (RU / EN)**; state is saved per chat.
 
+---
+## 🕯️ The Angel of the Last Hour
+
+When your health reaches zero, the chat doesn't simply end. An angel arrives — tsundere, of no fixed gender, faintly annoyed at having been called down for this — and asks five questions about the world your character lives in: its era, its customs, what the people of that time and place would take for granted. Two wrong answers are forgiven. Three are not.
+
+Win, and you are sent back with 20 health and a blessing, and the angel refuses to be thanked. Lose, and you get a card with your name on it and the offer of a new chat — the old one is never deleted, it is still there to read or pick up again.
+
+Once per chat. Death should cost something.
+
+Off by default; enable it in the Vitals settings, where you can also set how many recent messages the angel reads before writing its questions. If the model can't be reached, the angel brings its own riddles instead — the trial happens either way.
+
+---
 ## 📦 Install
 
 Copy the `RPG-Vitals` folder into:
