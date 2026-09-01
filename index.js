@@ -21,6 +21,8 @@ const defaultSettings = {
     manaEnabled: false,
     fatigueEnabled: false,
     gmControls: false,
+    angelEnabled: false,   // the death trial; off until asked for
+    angelDepth: 6,         // how many recent messages the angel reads
     autoDetect: false,
     combatInject: true,
     combatDepth: 1,
@@ -70,6 +72,22 @@ const I18N = {
         set_lang: 'Language:', set_depth: 'Context injection depth:', set_maxhp: 'Default max HP:',
         hunger: 'Hunger', feed: 'Feed', set_hungerlbl: 'Set',
         inject_hunger: 'Hunger: {h}/100', inject_starving: "{{user}} is starving (hunger 0) — weak, shaky and desperate for food; play this hunger out now",
+        angel_depth: 'Messages the angel reads:',
+        angel_offline: 'The records were down. The angel brought its own questions.',
+        angel_set: 'Angel of the last hour',
+        angel_hint: 'When health reaches zero, an angel appears and asks five questions about the world your character lives in. Two wrong answers are forgiven. Win and you are sent back with 20 health and a blessing; lose and you are offered a new chat — the old one is kept.',
+        angel_dead: 'YOU ARE DEAD',
+        angel_again: 'No one comes this time. The angel came once, and once was the arrangement.',
+        angel_waiting: 'Something is coming for you…',
+        angel_q: 'Question {n} of {of}', angel_left: 'mistakes left: {n}',
+        angel_next: 'Next', angel_verdict: 'Hear the verdict',
+        angel_spared: 'You are sent back.', angel_back: 'Return',
+        angel_stay: 'Stay here', angel_restart: 'Begin again',
+        angel_kept: 'This chat is not deleted. A new one opens beside it.',
+        angel_fail: 'The angel never arrived — the model could not be reached.',
+        angel_newchat_manual: 'Start a new chat yourself: this build cannot do it from here.',
+        angel_buff_name: 'Angel\'s blessing', angel_buff_eff: 'Sent back from the edge; wounds close faster than they should',
+        angel_chat_win: '{name} took pity. The angel sends {{user}} back — alive, against everything.',
         toast_starving: '{{user}} is starving!', toast_fed: 'Fed +{n}.',
         set_hunger: 'Enable hunger (depletes over messages)', set_hunger_every: 'Deplete every N bot messages:', set_hunger_amount: 'Hunger lost each time:', set_starve_dmg: 'HP lost per message while starving:',
         set_autodetect: 'Auto-update HP / hunger / effects from the story', set_gm: 'Show manual controls (GM / override)', set_url: 'API URL:', set_key: 'API Key:', set_model: 'Model:', auto_changed: 'The scene changed your state.',
@@ -106,6 +124,22 @@ const I18N = {
         set_lang: 'Язык:', set_depth: 'Глубина вставки в контекст:', set_maxhp: 'Макс. HP по умолчанию:',
         hunger: 'Сытость', feed: 'Покормить', set_hungerlbl: 'Задать',
         inject_hunger: 'Сытость: {h}/100', inject_starving: '{{user}} голодает (сытость 0) — слаб(а), дрожит и отчаянно ищет еду; обязательно отыграй этот голод сейчас',
+        angel_depth: 'Сколько сообщений читает ангел:',
+        angel_offline: 'Записи недоступны. Ангел принёс свои вопросы.',
+        angel_set: 'Ангел последнего часа',
+        angel_hint: 'Когда здоровье падает до нуля, приходит ангел и задаёт пять вопросов о мире, где живёт твой персонаж. Две ошибки прощаются. Выиграешь — вернёшься с 20 здоровья и благословением; проиграешь — предложат новый чат, старый останется.',
+        angel_dead: 'ВЫ МЕРТВЫ',
+        angel_again: 'В этот раз никто не придёт. Ангел приходил однажды, и однажды было условием.',
+        angel_waiting: 'За тобой уже идут…',
+        angel_q: 'Вопрос {n} из {of}', angel_left: 'ошибок осталось: {n}',
+        angel_next: 'Дальше', angel_verdict: 'Услышать приговор',
+        angel_spared: 'Тебя отправляют обратно.', angel_back: 'Вернуться',
+        angel_stay: 'Остаться здесь', angel_restart: 'Начать заново',
+        angel_kept: 'Этот чат не удаляется. Новый откроется рядом с ним.',
+        angel_fail: 'Ангел не пришёл — не удалось достучаться до модели.',
+        angel_newchat_manual: 'Создай новый чат сам: эта сборка не умеет отсюда.',
+        angel_buff_name: 'Благословение ангела', angel_buff_eff: 'Возвращён с края; раны затягиваются быстрее, чем должны',
+        angel_chat_win: '{name} сжалился. Ангел отправляет {{user}} обратно — живым, вопреки всему.',
         toast_starving: '{{user}} голодает!', toast_fed: 'Сытость +{n}.',
         set_hunger: 'Включить голод (убывает по сообщениям)', set_hunger_every: 'Убывает каждые N сообщений бота:', set_hunger_amount: 'Сколько сытости теряется за раз:', set_starve_dmg: 'HP теряется за сообщение при голоде:',
         set_autodetect: 'Авто-обновление HP / сытости / эффектов из сюжета', set_gm: 'Показывать ручные кнопки (GM / override)', set_url: 'API URL:', set_key: 'API-ключ:', set_model: 'Модель:', auto_changed: 'Сцена изменила твоё состояние.',
@@ -208,6 +242,7 @@ let stateReady = false;     // false while switching chats; saving is blocked
 
 function cloneState(s) { try { return JSON.parse(JSON.stringify(s)); } catch (e) { return freshState(); } }
 function normalizeState(s) {
+    if (typeof s.angelUsed !== 'boolean') s.angelUsed = false;   // one trial per chat
     if (typeof s.hp !== 'number') s.hp = settings.defaultMaxHp || 100;
     if (typeof s.maxHp !== 'number') s.maxHp = settings.defaultMaxHp || 100;
     if (!Array.isArray(s.buffs)) s.buffs = [];
@@ -290,7 +325,14 @@ function syncChat() {
 // True while the loaded state still belongs to the active chat. Guards async work.
 function ownsChat(id) { return !!(stateReady && id && currentChatId === id && getContext().chatId === id); }
 
-function clampHp() { state.hp = Math.max(0, Math.min(state.maxHp || 100, Math.round(state.hp))); }
+function clampHp() {
+    state.hp = Math.max(0, Math.min(state.maxHp || 100, Math.round(state.hp)));
+    // Every path that changes health passes through here — damage read from a message,
+    // the panel, another extension — so the trial is triggered from one place instead
+    // of being remembered at each of them. Deferred a tick so the caller finishes
+    // saving and redrawing before a full-screen card appears over it.
+    if (state.hp <= 0 && !angelState && typeof angelCheckDeath === 'function') setTimeout(() => { try { angelCheckDeath(); } catch (e) { console.error('[RPG Vitals] angel:', e); } }, 0);
+}
 function clampHunger() { state.hunger = Math.max(0, Math.min(100, Math.round(state.hunger))); }
 function feed(n) {
     if (!state || !settings.hungerEnabled) return 0;
@@ -913,6 +955,459 @@ function restoreVitScroll(saved) {
     } catch (e) { /* same */ }
 }
 
+/* ============================================================
+   THE ANGEL
+   ------------------------------------------------------------
+   When HP reaches zero the chat does not simply end. An angel turns up — tsundere,
+   of no fixed gender, faintly annoyed at having to be here — and asks five questions
+   about the world the character lives in. Two wrong answers are forgiven. Three are
+   not.
+
+   Win, and you are sent back with twenty health and a blessing. Lose, and you get a
+   card with your name on it and the offer of a new chat. The old chat is never
+   deleted: it is still there to go back to.
+
+   Once per chat. Death should cost something.
+   ============================================================ */
+
+const ANGEL_KEY = 'RPG_VITALS_ANGEL';
+
+/* The angel is generated per trial, so it is a different one each time — but the
+   personality is picked from a fixed set rather than left to chance in the prompt,
+   because "tsundere" alone produces the same sulky angel every time. */
+const ANGEL_MOODS = [
+    { id: 'irritated', en: 'openly irritated at having been called down for this', ru: 'откровенно раздражён тем, что его вызвали ради этого' },
+    { id: 'bored', en: 'bored, treating the whole thing as paperwork', ru: 'скучающий, относится к делу как к бумажной работе' },
+    { id: 'fond', en: 'secretly fond of the mortal and furious about being secretly fond', ru: 'втайне привязан к смертному и в бешенстве от собственной привязанности' },
+    { id: 'strict', en: 'strict and formal, hiding concern behind procedure', ru: 'строгий и официальный, прячет заботу за процедурой' },
+    { id: 'smug', en: 'smug, enjoying watching a mortal squirm', ru: 'самодовольный, наслаждается тем, как смертный выкручивается' }
+];
+
+const ANGEL_PROMPT = `You are writing a short trial scene for a roleplay game. The player's character has just died, and an angel has come to decide whether to send them back.
+
+THE ANGEL
+Gender: {gender}. Personality: tsundere — sharp on the surface, unwilling to admit any warmth, and {mood}. Give the angel a name that fits the setting below.
+
+THE TRIAL
+Write FIVE multiple-choice questions about THE WORLD the character lives in — its era, its customs, how ordinary things work in it, what people of that time and place would take for granted. Read the scene and the card below and pitch the questions at that world specifically. If the setting is historical, ask about that century. If it is invented, ask about what the card and the story establish.
+
+Questions must be answerable by someone paying attention to this story and this world. Not trivia about our world unless the story is set in it. Not questions about the plot of this chat.
+
+Each question: four options, exactly one correct. The wrong options must be plausible — a person who half-knows the setting should hesitate.
+
+Return ONLY JSON, no prose, no markdown:
+{"angel":{"name":"","greeting":"","onWin":"","onLose":""},"questions":[{"q":"","options":["","","",""],"answer":0,"note":""}]}
+
+- greeting: two or three sentences, in character. The angel explains the terms — five questions, two mistakes forgiven — while making clear this is beneath them.
+- onWin: two or three sentences. Grudging. They send the mortal back and refuse to be thanked, but a warning slips through.
+- onLose: two or three sentences. Not cruel. Even this angel finds no pleasure in it.
+- note: one sentence explaining the right answer, shown after the player answers.
+- answer: the index of the correct option, 0 to 3.
+
+Write everything in {lang}.
+
+THE SCENE:
+{scene}
+
+THE CHARACTER CARD:
+{card}`;
+
+/* If the model cannot be reached the angel used to simply not come, leaving the card
+   stuck on screen and the player dead with no way out. There is a trial waiting
+   instead — written by hand, about nothing in particular, so it works in any setting
+   and any century. Riddles rather than lore, because lore needs a model to read the
+   card. */
+const ANGEL_FALLBACK = {
+    en: {
+        name: 'The Angel on Duty',
+        greeting: "Don't look so pleased with yourself. The records are down, so you get my questions instead of yours — riddles, since apparently that is what I am reduced to. Five of them. Miss three and I stop being nice.",
+        onWin: "Fine. FINE. You may go back. Don't read anything into it, I simply cannot be bothered with the paperwork. And do try to be less breakable.",
+        onLose: "No. I am sorry — and I do mean that, which is the irritating part. Rest now.",
+        questions: [
+            { q: 'What has to be broken before you can use it?', options: ['A promise', 'An egg', 'A window', 'A silence'], answer: 1, note: 'An egg — broken to be of any use at all.' },
+            { q: 'The more you take of it, the more you leave behind. What is it?', options: ['Time', 'Breath', 'Footsteps', 'Water'], answer: 2, note: 'Footsteps: each one taken is one left behind you.' },
+            { q: 'What can travel the world while staying in one corner?', options: ['A shadow', 'A stamp', 'A rumour', 'The moon'], answer: 1, note: 'A stamp — it crosses the world from the corner of an envelope.' },
+            { q: 'What gets wetter the more it dries?', options: ['A river', 'A towel', 'A cloud', 'A stone'], answer: 1, note: 'A towel: drying something soaks it further.' },
+            { q: 'What belongs to you, but is used far more by everyone else?', options: ['Your name', 'Your hands', 'Your house', 'Your patience'], answer: 0, note: 'Your name — spoken by others far more than by you.' },
+            { q: 'What has many keys but cannot open a single lock?', options: ['A gaoler', 'A piano', 'A map', 'A riddle'], answer: 1, note: 'A piano.' },
+            { q: 'What goes up but never comes down?', options: ['Smoke', 'A price', 'Your age', 'A prayer'], answer: 2, note: 'Your age — it only ever climbs.' }
+        ]
+    },
+    ru: {
+        name: 'Дежурный ангел',
+        greeting: 'Не смотри так довольно. Записи недоступны, так что получишь мои вопросы вместо своих — загадки, раз уж до этого дошло. Пять штук. Ошибёшься трижды — и я перестану быть любезен.',
+        onWin: 'Ладно. ЛАДНО. Можешь возвращаться. Не выдумывай себе ничего, просто мне лень возиться с бумагами. И постарайся быть менее хрупким.',
+        onLose: 'Нет. Мне жаль — и это правда, что раздражает больше всего. Отдыхай.',
+        questions: [
+            { q: 'Что нужно сломать, прежде чем использовать?', options: ['Обещание', 'Яйцо', 'Окно', 'Тишину'], answer: 1, note: 'Яйцо — иначе от него никакого проку.' },
+            { q: 'Чем больше берёшь, тем больше остаётся позади. Что это?', options: ['Время', 'Дыхание', 'Шаги', 'Вода'], answer: 2, note: 'Шаги: каждый сделанный остаётся за спиной.' },
+            { q: 'Что объедет весь свет, оставаясь в одном углу?', options: ['Тень', 'Марка', 'Слух', 'Луна'], answer: 1, note: 'Марка — пересекает мир из угла конверта.' },
+            { q: 'Что становится мокрее, чем больше сушит?', options: ['Река', 'Полотенце', 'Облако', 'Камень'], answer: 1, note: 'Полотенце: вытирая, само намокает.' },
+            { q: 'Что принадлежит тебе, но другие пользуются им чаще?', options: ['Твоё имя', 'Твои руки', 'Твой дом', 'Твоё терпение'], answer: 0, note: 'Имя — его произносят другие куда чаще, чем ты сам.' },
+            { q: 'У чего много ключей, но не открыть ни одного замка?', options: ['У тюремщика', 'У рояля', 'У карты', 'У загадки'], answer: 1, note: 'У рояля.' },
+            { q: 'Что растёт, но никогда не убывает?', options: ['Дым', 'Цена', 'Возраст', 'Молитва'], answer: 2, note: 'Возраст — он только прибавляется.' }
+        ]
+    }
+};
+
+/* Five of the seven, in a different order each time, so a second death in a later chat
+   is not the same five questions in the same order. */
+function angelFallbackTrial() {
+    const src = ANGEL_FALLBACK[settings.language === 'ru' ? 'ru' : 'en'];
+    const pool = src.questions.slice();
+    for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const picked = pool.slice(0, 5).map(q => {
+        // The options are shuffled too, and the answer index follows them.
+        const right = q.options[q.answer];
+        const opts = q.options.slice();
+        for (let i = opts.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [opts[i], opts[j]] = [opts[j], opts[i]];
+        }
+        return { q: q.q, options: opts, answer: opts.indexOf(right), note: q.note };
+    });
+    return {
+        name: src.name, greeting: src.greeting, onWin: src.onWin, onLose: src.onLose,
+        questions: picked, allowed: 2
+    };
+}
+
+let angelState = null;      // { data, idx, wrong, answered } while a trial is running
+
+function angelUsedKey() { return 'angelUsed'; }
+
+function angelAvailable() {
+    if (!settings.angelEnabled) return false;
+    if (!state) return false;
+    if (state[angelUsedKey()]) return false;    // one per chat
+    return true;
+}
+
+/* Called whenever HP changes. Deliberately not tied to any one path — damage from a
+   message, from the panel, from another extension all end up here. */
+function angelCheckDeath() {
+    if (!settings.angelEnabled || !state) return;
+    if ((state.hp | 0) > 0) return;
+    if (angelState) return;                      // already on screen
+
+    /* The second death in the same chat. The angel came once and does not come twice —
+       but doing nothing at all left the player at zero health with no card, no
+       explanation and nothing to press. The plain notice is shown instead: the same
+       two ways on, without a trial. */
+    if (state[angelUsedKey()]) { angelState = { done: 'again' }; angelRender(); return; }
+    angelBegin();
+}
+
+function angelSceneText() {
+    try {
+        const chat = getContext().chat || [];
+        // How far back the angel reads. A long chat must not be sent wholesale, and
+        // six messages is enough to know what room everyone is standing in.
+        const depth = Math.max(2, Math.min(30, settings.angelDepth || 6));
+        return chat.slice(-depth).filter(m => m && !m.is_system)
+            .map(m => `${m.name || ''}: ${String(m.mes || '').replace(/\s+/g, ' ').trim()}`)
+            .join('\n').slice(0, 2500);
+    } catch (e) { return ''; }
+}
+
+function angelCardText() {
+    try {
+        const ctx = getContext();
+        const ch = ctx.characters?.[ctx.characterId];
+        if (!ch) return '';
+        return [ch.name, ch.description, ch.personality, ch.scenario]
+            .filter(Boolean).join('\n').slice(0, 2000);
+    } catch (e) { return ''; }
+}
+
+async function angelBegin() {
+    const myChat = getContext().chatId;
+    angelState = { data: null, idx: 0, wrong: 0, answered: false, loading: true };
+    angelRender();
+
+    const ru = settings.language === 'ru';
+    const mood = ANGEL_MOODS[Math.floor(Math.random() * ANGEL_MOODS.length)];
+    const gender = Math.random() < 0.5 ? (ru ? 'мужской' : 'male') : (ru ? 'женский' : 'female');
+
+    const sys = ANGEL_PROMPT
+        .replace('{gender}', gender)
+        .replace('{mood}', ru ? mood.ru : mood.en)
+        .replace('{lang}', ru ? 'Russian' : 'English')
+        .replace('{scene}', angelSceneText() || '(no scene)')
+        .replace('{card}', angelCardText() || '(no card)');
+
+    try {
+        const out = await callAI(sys, ru ? 'Составь испытание.' : 'Write the trial.');
+        if (!ownsChat(myChat)) { angelState = null; return; }
+        const data = angelSanitize(out);
+        if (!data) throw new Error('unusable answer');
+        angelState = { data, idx: 0, wrong: 0, answered: false, loading: false };
+    } catch (e) {
+        console.error('[RPG Vitals] angel trial failed, using the written one:', e);
+        if (!ownsChat(myChat)) { angelState = null; return; }
+        // The trial still happens. Dying because an endpoint was unreachable would be
+        // absurd, and so would leaving the card frozen on screen.
+        angelState = { data: angelFallbackTrial(), idx: 0, wrong: 0, answered: false, loading: false };
+        toastr.info(t('angel_offline'));
+    }
+    angelRender();
+}
+
+/* Nothing from the model is trusted: a trial with four identical options or an answer
+   index pointing nowhere is worse than no trial at all. */
+function angelSanitize(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const a = raw.angel || {};
+    const qs = Array.isArray(raw.questions) ? raw.questions : null;
+    if (!qs) return null;
+
+    const clean = [];
+    for (const q of qs) {
+        if (!q || typeof q.q !== 'string' || !q.q.trim()) continue;
+        const opts = Array.isArray(q.options) ? q.options.map(o => String(o ?? '').trim()).filter(Boolean) : [];
+        if (opts.length < 2) continue;
+        if (new Set(opts).size !== opts.length) continue;      // duplicate options
+        let ans = Number(q.answer);
+        if (!Number.isInteger(ans) || ans < 0 || ans >= opts.length) continue;
+        clean.push({ q: q.q.trim(), options: opts, answer: ans, note: String(q.note ?? '').trim() });
+        if (clean.length === 5) break;
+    }
+    if (clean.length < 3) return null;      // fewer than three is not a trial
+
+    return {
+        name: String(a.name ?? '').trim() || (settings.language === 'ru' ? 'Ангел' : 'The Angel'),
+        greeting: String(a.greeting ?? '').trim(),
+        onWin: String(a.onWin ?? '').trim(),
+        onLose: String(a.onLose ?? '').trim(),
+        questions: clean,
+        allowed: Math.max(1, clean.length - 3)   // five questions -> two mistakes forgiven
+    };
+}
+
+function angelAnswer(i) {
+    const st = angelState;
+    // Already answered, or the card is between questions: a second click must not
+    // count as a second answer.
+    if (!st || !st.data || st.answered || st.busy) return;
+    const q = st.data.questions[st.idx];
+    st.answered = true;
+    st.lastRight = (i === q.answer);
+    st.picked = i;
+    if (!st.lastRight) st.wrong++;
+    angelRender();
+}
+
+function angelNext() {
+    const st = angelState;
+    if (!st || !st.data || st.busy) return;
+    st.busy = true;
+    if (st.wrong > st.data.allowed) return angelLose();
+    st.idx++;
+    if (st.idx >= st.data.questions.length) return angelWin();
+    st.answered = false; st.picked = -1; st.busy = false;
+    angelRender();
+}
+
+function angelWin() {
+    const st = angelState;
+    const d = st && st.data;
+    state[angelUsedKey()] = true;
+
+    /* setHp and addBuff each save, redraw and rebuild the injection on their own, so
+       calling both and then saving again did all three work three times over. The
+       state is set directly and written once. */
+    state.hp = Math.min(20, state.maxHp || 100);
+    clampHp();
+    if (!Array.isArray(state.buffs)) state.buffs = [];
+    state.buffs.push({
+        name: t('angel_buff_name'),
+        effect: t('angel_buff_eff'),
+        kind: 'buff',
+        duration: 10
+    });
+    saveState();
+    buildInjection();
+
+    // The chat is told what happened, in the angel's own words, so the model can
+    // carry on from it instead of being surprised by a suddenly living character.
+    angelSay(`[${t('angel_chat_win', { name: d ? d.name : '' })}${d && d.onWin ? '\n' + d.onWin : ''}]`);
+
+    angelState = { done: 'win', data: d };
+    angelRender();
+    renderPanel();
+}
+
+function angelLose() {
+    const st = angelState;
+    state[angelUsedKey()] = true;
+    /* Health is left at zero deliberately — the character is dead, and the card says
+       so. But the trial is spent, so nothing will call the angel again: without this
+       the player would sit at zero with every later message quietly trying and failing
+       to summon someone. The panel now shows the state plainly and the two buttons are
+       the only way on. */
+    saveState();
+    buildInjection();
+    angelState = { done: 'lose', data: st && st.data };
+    angelRender();
+    renderPanel();
+}
+
+function angelSay(text) {
+    try {
+        const ctx = getContext();
+        const chat = ctx.chat;
+        if (!chat) return;
+        chat.push({
+            name: 'System', is_user: false, is_system: false, is_name: false,
+            send_date: Date.now(), mes: text, extra: { rpg_vitals_angel: true }
+        });
+        if (typeof ctx.addOneMessage === 'function') ctx.addOneMessage(chat[chat.length - 1]);
+        saveChatDebounced();
+    } catch (e) { console.error('[RPG Vitals] angel message failed:', e); }
+}
+
+async function angelNewChat() {
+    try {
+        const ctx = getContext();
+        // The old chat is NOT deleted — a new one is opened beside it, so the story
+        // can still be read or picked up again.
+        if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
+            await ctx.executeSlashCommandsWithOptions('/newchat');
+        } else if (typeof ctx.executeSlashCommands === 'function') {
+            await ctx.executeSlashCommands('/newchat');
+        } else {
+            toastr.info(t('angel_newchat_manual'));
+        }
+    } catch (e) {
+        console.error('[RPG Vitals] new chat failed:', e);
+        toastr.info(t('angel_newchat_manual'));
+    }
+    angelClose();
+}
+
+function angelClose() {
+    angelState = null;
+    const el = document.getElementById('rpg-angel');
+    if (el) el.remove();
+}
+
+/* ---------- the card itself ---------- */
+/* The card is rebuilt on every click — answering, moving to the next question — and
+   its entrance animations replayed each time, which reads as a flinch. The flag goes
+   on after the first draw and stays: taking it off again is what makes an animation
+   start, not what stops it. */
+let angelDrawn = false;
+
+function angelRender() {
+    let el = document.getElementById('rpg-angel');
+    if (!angelState) { if (el) el.remove(); angelDrawn = false; return; }
+
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'rpg-angel';
+        document.body.appendChild(el);
+        angelDrawn = false;                      // a fresh card may make its entrance
+    }
+    el.classList.toggle('ang-quiet', angelDrawn);
+    angelDrawn = true;
+
+    const st = angelState;
+    const d = st.data;
+
+    if (st.loading) {
+        el.innerHTML = `<div class="ang-dim"></div>
+            <div class="ang-card ang-wait"><div class="ang-title">${escapeHtml(t('angel_dead'))}</div>
+            <div class="ang-sub">${escapeHtml(t('angel_waiting'))}</div></div>`;
+        return;
+    }
+
+    if (st.done === 'win') {
+        el.innerHTML = `<div class="ang-dim"></div>
+            <div class="ang-card ang-good">
+                <div class="ang-name">${escapeHtml(d ? d.name : '')}</div>
+                <div class="ang-speech">${escapeHtml(d && d.onWin ? d.onWin : '')}</div>
+                <div class="ang-verdict">${escapeHtml(t('angel_spared'))}</div>
+                <div class="ang-actions"><button class="ang-btn ok" data-ang="close">${escapeHtml(t('angel_back'))}</button></div>
+            </div>`;
+        angelWire(el);
+        return;
+    }
+
+    if (st.done === 'again') {
+        el.innerHTML = `<div class="ang-dim"></div>
+            <div class="ang-card">
+                <div class="ang-title ang-bleed">${escapeHtml(t('angel_dead'))}</div>
+                <div class="ang-speech">${escapeHtml(t('angel_again'))}</div>
+                <div class="ang-actions">
+                    <button class="ang-btn" data-ang="close">${escapeHtml(t('angel_stay'))}</button>
+                    <button class="ang-btn danger" data-ang="new">${escapeHtml(t('angel_restart'))}</button>
+                </div>
+                <div class="ang-note">${escapeHtml(t('angel_kept'))}</div>
+            </div>`;
+        angelWire(el);
+        return;
+    }
+
+    if (st.done === 'lose') {
+        el.innerHTML = `<div class="ang-dim"></div>
+            <div class="ang-card">
+                <div class="ang-title ang-bleed">${escapeHtml(t('angel_dead'))}</div>
+                <div class="ang-name">${escapeHtml(d ? d.name : '')}</div>
+                <div class="ang-speech">${escapeHtml(d && d.onLose ? d.onLose : '')}</div>
+                <div class="ang-actions">
+                    <button class="ang-btn" data-ang="close">${escapeHtml(t('angel_stay'))}</button>
+                    <button class="ang-btn danger" data-ang="new">${escapeHtml(t('angel_restart'))}</button>
+                </div>
+                <div class="ang-note">${escapeHtml(t('angel_kept'))}</div>
+            </div>`;
+        angelWire(el);
+        return;
+    }
+
+    const q = d.questions[st.idx];
+    const left = d.allowed - st.wrong;
+    const opts = q.options.map((o, i) => {
+        let cls = '';
+        if (st.answered) {
+            if (i === q.answer) cls = 'right';
+            else if (i === st.picked) cls = 'wrong';
+        }
+        return `<button class="ang-opt ${cls}" data-ang="pick" data-i="${i}" ${st.answered ? 'disabled' : ''}>${escapeHtml(o)}</button>`;
+    }).join('');
+
+    el.innerHTML = `<div class="ang-dim"></div>
+        <div class="ang-card">
+            <div class="ang-title ang-bleed">${escapeHtml(t('angel_dead'))}</div>
+            <div class="ang-name">${escapeHtml(d.name)}</div>
+            ${st.idx === 0 && d.greeting ? `<div class="ang-speech">${escapeHtml(d.greeting)}</div>` : ''}
+            <div class="ang-meta">
+                <span>${escapeHtml(t('angel_q', { n: st.idx + 1, of: d.questions.length }))}</span>
+                <span class="ang-lives ${left <= 0 ? 'last' : ''}">${escapeHtml(t('angel_left', { n: Math.max(0, left) }))}</span>
+            </div>
+            <div class="ang-q">${escapeHtml(q.q)}</div>
+            <div class="ang-opts">${opts}</div>
+            ${st.answered ? `<div class="ang-note ${st.lastRight ? 'ok' : 'bad'}">${escapeHtml(q.note || '')}</div>
+                <div class="ang-actions"><button class="ang-btn ok" data-ang="next">${escapeHtml(
+                    st.wrong > d.allowed ? t('angel_verdict') : (st.idx + 1 >= d.questions.length ? t('angel_verdict') : t('angel_next')))}</button></div>` : ''}
+        </div>`;
+    angelWire(el);
+}
+
+function angelWire(el) {
+    el.querySelectorAll('[data-ang]').forEach(b => {
+        b.addEventListener('click', () => {
+            const what = b.dataset.ang;
+            if (what === 'pick') angelAnswer(parseInt(b.dataset.i, 10));
+            else if (what === 'next') angelNext();
+            else if (what === 'new') angelNewChat();
+            else angelClose();
+        });
+    });
+}
+
 function renderPanel() {
     const bodyEl = document.getElementById('rpg-vit-body');
     if (!bodyEl || !state) return;
@@ -1278,6 +1773,10 @@ function settingsHtml() {
             <label class="checkbox_label"><input type="checkbox" id="rpg-vit-fatigue-en"> ${t('set_fatigue')}</label>
             <hr style="border-color:#d8ccae;">
             <label class="checkbox_label"><input type="checkbox" id="rpg-vit-gm"> ${t('set_gm')}</label>
+            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-angel"> ${t('angel_set')}</label>
+            <div class="rpg-vit-note">${t('angel_hint')}</div>
+            <label class="rpg-vit-row"><span>${t('angel_depth')}</span>
+                <input type="number" id="rpg-vit-angel-depth" class="text_pole" min="2" max="30" step="1" style="width:70px;"></label>
             <label class="checkbox_label"><input type="checkbox" id="rpg-vit-autodetect"> ${t('set_autodetect')}</label>
             <hr style="border-color:#d8ccae;">
             <label class="checkbox_label"><input type="checkbox" id="rpg-vit-combat-inject"> ${t('set_combat_inject')}</label>
@@ -1331,6 +1830,11 @@ function setupUI() {
     $('#rpg-vit-level-en').prop('checked', !!settings.levelEnabled).on('change', function () { settings.levelEnabled = this.checked; saveSettings(); renderPanel(); buildInjection(); });
     $('#rpg-vit-mana-en').prop('checked', !!settings.manaEnabled).on('change', function () { settings.manaEnabled = this.checked; saveSettings(); renderPanel(); buildInjection(); });
     $('#rpg-vit-fatigue-en').prop('checked', !!settings.fatigueEnabled).on('change', function () { settings.fatigueEnabled = this.checked; saveSettings(); renderPanel(); buildInjection(); });
+    $('#rpg-vit-angel').prop('checked', !!settings.angelEnabled).on('change', function () { settings.angelEnabled = this.checked; saveSettings(); });
+    $('#rpg-vit-angel-depth').val(settings.angelDepth || 6).on('change', function () {
+        settings.angelDepth = Math.max(2, Math.min(30, parseInt(this.value, 10) || 6));
+        this.value = settings.angelDepth; saveSettings();
+    });
     $('#rpg-vit-autodetect').prop('checked', !!settings.autoDetect).on('change', function () { settings.autoDetect = this.checked; saveSettings(); });
     $('#rpg-vit-combat-inject').prop('checked', settings.combatInject !== false).on('change', function () { settings.combatInject = this.checked; saveSettings(); buildInjection(); });
     $('#rpg-vit-combat-depth').val(typeof settings.combatDepth === 'number' ? settings.combatDepth : settings.injectDepth).on('change', function () { settings.combatDepth = Math.max(0, parseInt($(this).val()) || 0); saveSettings(); buildInjection(); });

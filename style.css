@@ -214,3 +214,121 @@
     #rpg-vit-body .vex.gm .vex-col > *:first-child { margin-top:0; border-top:none; padding-top:0; }
     #rpg-vit-modal.vex-wide { width:620px; left:calc(50vw - 310px); }
 }
+
+/* ============================================================
+   THE ANGEL
+   Same paper as the rest of the extension, but the sheet has been through something:
+   scorched at the edges, stained, the typewriter ink gone brown. It uses the panel's
+   own variables and its own font, so it reads as a page from the same file rather
+   than a screen borrowed from another program.
+   ============================================================ */
+#rpg-angel {
+    position: fixed; inset: 0; z-index: 100000;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--pg-type);
+}
+#rpg-angel .ang-dim {
+    position: absolute; inset: 0;
+    background: radial-gradient(120% 90% at 50% 40%, rgba(20,10,6,.80), rgba(8,4,3,.94));
+    animation: ang-fade .5s ease both;
+}
+@keyframes ang-fade { from { opacity: 0; } to { opacity: 1; } }
+
+#rpg-angel .ang-card {
+    position: relative; width: min(560px, 92vw); max-height: 88vh; overflow-y: auto;
+    padding: 26px 30px 22px;
+    color: #4a4234;
+    /* scorched paper: the grain from the panel, a burn creeping in from the corners,
+       and an old stain low on the sheet */
+    background-image:
+        var(--pg-noise),
+        radial-gradient(120% 70% at 8% 0%, rgba(90,44,18,.30), transparent 46%),
+        radial-gradient(110% 65% at 100% 100%, rgba(74,32,12,.34), transparent 44%),
+        radial-gradient(60% 40% at 72% 78%, rgba(120,60,26,.16), transparent 70%),
+        linear-gradient(168deg, #e8dcc0 0%, #ddcfae 55%, #cdbb95 100%);
+    background-size: 180px 180px, auto, auto, auto, auto;
+    background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+    border: 1px solid #8a6a3c;
+    border-radius: 3px 5px 4px 6px;         /* a torn sheet is not a rectangle */
+    box-shadow: 0 26px 70px rgba(0,0,0,.75), 0 0 26px rgba(70,30,10,.35) inset;
+    animation: ang-rise .45s cubic-bezier(.2,.9,.3,1) both;
+}
+@keyframes ang-rise { from { opacity: 0; transform: translateY(18px) rotate(-.4deg); } to { opacity: 1; transform: rotate(-.4deg); } }
+/* the burnt rim */
+#rpg-angel .ang-card::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+    box-shadow: 0 0 0 1px rgba(60,26,8,.5) inset, 0 0 18px rgba(40,16,4,.55) inset;
+}
+
+#rpg-angel .ang-title {
+    font-size: 1.8rem; letter-spacing: 8px; text-align: center; font-weight: 700;
+    color: #8a2318; margin-bottom: 6px; position: relative;
+}
+/* The drips are gone. Three gradient stripes never looked like blood on paper — they
+   looked like three gradient stripes. The heading carries the weight on its own: the
+   ink has bled into the fibres the way a stamp does on damp paper. */
+#rpg-angel .ang-bleed {
+    text-shadow: 0 0 1px rgba(138,35,24,.55), 0 1px 0 rgba(90,20,14,.35);
+}
+#rpg-angel .ang-bleed::after {
+    content: ""; position: absolute; left: 12%; right: 12%; top: calc(100% + 7px); height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(138,35,24,.55), transparent);
+}
+
+#rpg-angel .ang-name {
+    text-align: center; font-size: .74rem; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--pg-muted); margin: 16px 0 10px;
+}
+#rpg-angel .ang-speech { font-style: italic; line-height: 1.62; margin-bottom: 16px; text-align: center; color: #453d30; }
+#rpg-angel .ang-sub { text-align: center; color: var(--pg-muted); margin-top: 12px; font-style: italic; }
+
+#rpg-angel .ang-meta {
+    display: flex; justify-content: space-between; font-size: .7rem; letter-spacing: 1px;
+    color: var(--pg-faint); margin-bottom: 8px; text-transform: uppercase;
+    border-bottom: 1px dashed var(--pg-line); padding-bottom: 6px;
+}
+#rpg-angel .ang-lives.last { color: #8a2318; font-weight: 700; }
+#rpg-angel .ang-q { font-size: 1rem; line-height: 1.55; margin-bottom: 14px; color: var(--pg-ink-h); }
+
+#rpg-angel .ang-opts { display: flex; flex-direction: column; gap: 7px; }
+/* the same button as everywhere else in the panel, aged a little */
+#rpg-angel .ang-opt {
+    font-family: var(--pg-type); font-size: .86rem; text-align: left; padding: 9px 13px; cursor: pointer;
+    background: #efe6cf; border: 1px solid #b6a47b; border-radius: 5px;
+    color: #4a4234; transition: .15s;
+}
+#rpg-angel .ang-opt:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.03); }
+#rpg-angel .ang-opt:disabled { cursor: default; }
+#rpg-angel .ang-opt.right { background: var(--pg-green); border-color: #5b7d44; color: #fff; }
+#rpg-angel .ang-opt.wrong { background: #ecd6d2; border-color: #c08a82; color: #7a2f26; }
+
+#rpg-angel .ang-note { font-size: .8rem; line-height: 1.5; color: var(--pg-muted); margin-top: 12px; font-style: italic; }
+#rpg-angel .ang-note.ok { color: #4f6b3c; }
+#rpg-angel .ang-note.bad { color: #8f4033; }
+#rpg-angel .ang-verdict { text-align: center; font-size: 1.02rem; color: #4f6b3c; margin: 14px 0 4px; }
+
+#rpg-angel .ang-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+/* Copied from .rpg-vit-btn in the panel above, values and all, so the angel's buttons
+   are the panel's buttons rather than something that merely resembles them. */
+#rpg-angel .ang-btn {
+    font-family: var(--pg-type); font-size: .8rem; padding: 6px 14px; border-radius: 5px;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    transition: .15s; border: 1px solid #b6a47b; background: #efe6cf; color: #4a4234;
+}
+#rpg-angel .ang-btn:hover { transform: translateY(-1px); filter: brightness(1.03); }
+#rpg-angel .ang-btn.ok { background: var(--pg-green); border-color: #5b7d44; color: #fff; }
+#rpg-angel .ang-btn.danger { background: #ecd6d2; border-color: #c08a82; color: #7a2f26; }
+/* spared: the scorching lifts a little */
+#rpg-angel .ang-card.ang-good {
+    border-color: #7d8f5e;
+    box-shadow: 0 26px 70px rgba(0,0,0,.7), 0 0 26px rgba(111,147,85,.22) inset;
+}
+
+/* A redraw, not a first appearance: the card is rebuilt on every answer and its
+   entrance would play again each time. */
+#rpg-angel.ang-quiet .ang-dim,
+#rpg-angel.ang-quiet .ang-card { animation: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+    #rpg-angel .ang-dim, #rpg-angel .ang-card { animation: none; }
+}
