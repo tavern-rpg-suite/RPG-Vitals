@@ -5,10 +5,15 @@ A SillyTavern extension that gives the player a living **HP bar**, optional **hu
 > Part of the RPG suite. It exposes a small bridge (`window.RPG.vitals`) and reads `window.RPG.equipment`, so other modules plug into it — but it works perfectly on its own.
 
 **Version 1.11.1**
+<p>
+<img width="1672" height="941" alt="9b7200f2-02c4-490a-a6cf-02b85e4ce8ab" src="https://github.com/user-attachments/assets/dabb96b5-7c00-4708-b9eb-5d30aa8704ad" />
+</p>
 
 ---
-
 ## ✨ Features
+
+<img width="396" height="507" alt="Screenshot_12" src="https://github.com/user-attachments/assets/0de1bb4a-808b-4a08-9604-d26d136e4474" />
+
 
 - ❤️ **HP bar** with an animated ECG, current / max, and (in GM mode) Heal / Damage / Set controls.
 - 🍖 **Hunger / satiety** (optional) — depletes over messages; at zero you start starving and lose HP. **Eating always adds satiety** (the field is now framed as *satiety*, so a meal never reads as "more hungry").
@@ -23,6 +28,9 @@ A SillyTavern extension that gives the player a living **HP bar**, optional **hu
 
 ---
 ## 🕯️ The Angel of the Last Hour
+
+<img width="575" height="510" alt="Screenshot_15" src="https://github.com/user-attachments/assets/f20f405a-2045-4515-95b5-6347cc9019a4" />
+
 
 When your health reaches zero, the chat doesn't simply end. An angel arrives — tsundere, of no fixed gender, faintly annoyed at having been called down for this — and asks five questions about the world your character lives in: its era, its customs, what the people of that time and place would take for granted. Two wrong answers are forgiven. Three are not.
 
