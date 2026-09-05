@@ -1,13 +1,14 @@
 # RPG Vitals (HP & Effects)
 
+<p>
+<img width="1672" height="941" alt="9b7200f2-02c4-490a-a6cf-02b85e4ce8ab" src="https://github.com/user-attachments/assets/dabb96b5-7c00-4708-b9eb-5d30aa8704ad" />
+</p>
+
 A SillyTavern extension that gives the player a living **HP bar**, optional **hunger/satiety**, a list of **effects** (buffs / debuffs), and a lightweight **combat / enemy tracker** — all on a hand-drawn "medical examination" card. Each turn it quietly tells the model your current state so the scene reacts to it.
 
 > Part of the RPG suite. It exposes a small bridge (`window.RPG.vitals`) and reads `window.RPG.equipment`, so other modules plug into it — but it works perfectly on its own.
 
 **Version 1.11.1**
-<p>
-<img width="1672" height="941" alt="9b7200f2-02c4-490a-a6cf-02b85e4ce8ab" src="https://github.com/user-attachments/assets/dabb96b5-7c00-4708-b9eb-5d30aa8704ad" />
-</p>
 
 ---
 ## ✨ Features
