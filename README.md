@@ -78,3 +78,7 @@ Three independent toggles in settings, all driven by the story the same way hung
 - **Fatigue** — a 0–100 bar (higher = more tired); rises with exertion and combat, falls with rest and sleep.
 
 Each is injected into the prompt when enabled, so the character knows you're low on mana or worn out. GM mode adds a Set control for mana and fatigue. Other modules can nudge them via the bridge (`getMana/addMana/setMana`, `getFatigue/addFatigue/setFatigue`, `getLevel/addXp`) — e.g. a mana potion from the inventory.
+
+---
+## ✨ Screenshots
+<img width="1896" height="861" alt="Preview-RPG Vitals (HP   Effects)" src="https://github.com/user-attachments/assets/832147b7-f02f-4877-8480-b3c54ca90211" />
