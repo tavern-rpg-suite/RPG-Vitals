@@ -595,6 +595,31 @@ function mentionsEating(text) { return EAT_RE.test(String(text || '')); }
 const CARE_RE = /\b(bandag|patch(ed|es|ing)? up|dress(ed|ing)? the wound|tend(ed|ing)?|stitch|heal|rest|sleep|slept|nap|recover|recuperat|meditat|catch (my|her|his) breath|first aid|salve|ointment|potion|drink.*potion)\b|перевяз|перевязк|перевязал|обработал.*ран|заклеил|зашил|бинт|лечу|лечит|лечен|исцел|отдых|отдохн|поспал|вздремн|передохн|восстанавлив|отлежал|медитир|отдышал|мазь|зель[ея]|снадоб/i;
 function mentionsCare(text) { return CARE_RE.test(String(text || '')); }
 
+/* Asks one question and expects one word. Deliberately tiny: a short prompt, a short
+   answer, and no schema to go wrong. If the model is unreachable or answers something
+   unexpected the damage is allowed through, because refusing to ever apply damage
+   would be a worse bug than the one being fixed. */
+async function whoseHurt(text, who, others) {
+    try {
+        const sys = `In the passage below, WHO was physically hurt?
+"${who}" is the player. ${others.map(n => `"${n}"`).join(', ')} ${others.length > 1 ? 'are' : 'is'} someone else.
+Answer with ONE word and nothing else:
+player  — if "${who}" personally took the injury
+other   — if only someone else was hurt
+none    — if nobody was actually hurt in this passage
+Watching, hearing about, or fearing an injury is not being hurt.`;
+        const r = await callAI(sys, String(text || '').slice(0, 1200));
+        const a = String((r && (r.answer ?? r.who ?? r.result)) ?? r ?? '').toLowerCase();
+        if (/\bother\b/.test(a)) return 'other';
+        if (/\bnone\b/.test(a)) return 'other';       // nobody hurt means not the player either
+        if (/\bplayer\b/.test(a)) return 'player';
+        return 'player';                               // unreadable answer: leave the original call alone
+    } catch (e) {
+        console.warn('[RPG Vitals] whose-hurt check failed, keeping the damage:', e);
+        return 'player';
+    }
+}
+
 async function analyzeMessage(messageId, opts) {
     opts = opts || {};
     if (!settings.enabled || !settings.autoDetect || !apiKey() || !state) return;
@@ -654,7 +679,35 @@ Write effect names in ${genLang()}. Output strictly JSON: {"hp_delta":0${setting
         if (settings.fatigueEnabled) { fields += ',"fatigue_delta":0'; rules += `\n- "fatigue_delta": how much MORE tired "${who}" got (positive: hard exertion, fighting, sprinting, no sleep) or how much they recovered (negative: rest/sleep) THIS message.`; }
         if (settings.levelEnabled) { fields += ',"xp_delta":0'; rules += `\n- "xp_delta": experience for a real achievement by "${who}" THIS message (finishing a quest, a big victory, a breakthrough) — usually 0, occasionally 10–40. Do NOT award xp just for talking.`; }
 
-        const sys = `You track the physical state of "${who}" (the player/user) in a roleplay. ${partner ? `"${partner}" is the scene character, NOT "${who}" — report only what changed for "${who}", never for "${partner}".` : ''} Read ONLY the latest scene text and report what actually changed for "${who}" in THIS message.
+        /* Everyone in the scene has a body, and the model was being asked to watch one
+           of them while reading about all of them. A single line naming the partner was
+           not enough: in a group chat, or when an NPC turns up mid-scene, the wounds of
+           whoever was described most vividly ended up on the player.
+
+           The rule is now stated as a rule, with the other names listed by name, and
+           with the one case that caused most of it spelled out — the character being
+           hurt while the player only watches. */
+        const others = (() => {
+            try {
+                const ctx = getContext();
+                const names = new Set();
+                if (partner) names.add(partner);
+                (ctx.chat || []).slice(-12).forEach(m => {
+                    if (m && !m.is_user && !m.is_system && m.name && m.name !== who) names.add(m.name);
+                });
+                return [...names].slice(0, 8);
+            } catch (e) { return partner ? [partner] : []; }
+        })();
+        const notMe = others.length
+            ? `\n\nWHOSE BODY THIS IS ABOUT — the single most important rule:
+"${who}" is the player. ${others.map(n => `"${n}"`).join(', ')} ${others.length > 1 ? 'are' : 'is'} NOT "${who}".
+Report ONLY what happened to "${who}"'s own body. If someone else is struck, bleeding, poisoned, exhausted or healed, that is THEIR body and NOT the player's — return 0 for it.
+Watching someone get hurt is not being hurt. Being told about an injury is not having one. Fearing a blow is not taking one.
+If the message never makes clear that "${who}" personally was affected, return zeros. When in doubt it is always zeros.`
+            : `\n\nReport ONLY what happened to "${who}"'s own body. Anyone else's injuries are not the player's — return 0 for those. When in doubt, return zeros.`;
+
+        const sys = `You track the physical state of "${who}" (the player/user) in a roleplay.${notMe}
+Read ONLY the latest scene text and report what actually changed for "${who}" in THIS message.
 Be conservative: most messages change nothing — then return zeros and empty arrays. Only react to clear events (taking a hit, healing/resting, eating/drinking, being poisoned/drunk/blessed/exhausted, an effect ending).
 Current HP ${state.hp}/${state.maxHp}${hungerInfo}${manaInfo}${fatigueInfo}${lvlInfo}. Current effects: ${effList}.${rules}
 Write any effect names/descriptions in ${genLang()}.
@@ -669,6 +722,25 @@ Output strictly JSON: {${fields}}`;
             // this very message; otherwise story wounds (traps, falls, ambush narration)
             // never reached HP at all with combatAuto on
             if (hpd < 0 && settings.combatAuto && opts && opts.combatDmg > 0) hpd = 0;
+
+            /* Second line of defence. A prompt is a request, not a guarantee, and the
+               one thing worth being sure about is damage: healing the player by mistake
+               is a small annoyance, hurting them for someone else's wound ruins the
+               scene. So when damage is reported the model is asked once more, plainly,
+               whose body it was — and anything short of a clear "the player" is dropped.
+
+               Only for damage, and only when the answer is unambiguous, so the extra
+               call is rare and the failure mode is "nothing happens" rather than
+               "something wrong happens". */
+            if (hpd < 0 && others.length) {
+                const verdict = await whoseHurt(msg.mes, who, others);
+                if (!ownsChat(myChat)) return;
+                if (verdict === 'other') {
+                    console.log('[RPG Vitals] damage ignored: it belonged to ' + others.join('/'));
+                    hpd = 0;
+                }
+            }
+
             if (hpd > 0) { heal(hpd); notes.push(`HP +${hpd}`); }
             else if (hpd < 0) { damage(-hpd); notes.push(`HP ${hpd}`); }
         }
