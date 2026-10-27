@@ -28,6 +28,14 @@ const defaultSettings = {
     combatDepth: 1,
     combatAuto: false,
     combatScanMsgs: 4,
+    intimacyEnabled: false,   // intimate scenes leave effects too — read by the same story scan, no extra call
+    playerSex: '',            // the player's body: '' (not said) | 'f' | 'm' | 'x'
+    playerCycle: false,       // a woman player's cycle, counted by code on the story's own days
+    playerPregnancy: false,   // a chance of pregnancy after a night — off until asked for
+    playerHidePreg: true,     // nobody knows until the period is late
+    playerPill: false,        // she takes the pill
+    cycleDayEvery: 30,        // with no Scene Card date: a new day every N replies
+    playerTraits: {},         // per persona, for good: { len, period, pain, fertile, rolls }
     baseUrl: 'https://openrouter.ai/api/v1',
     apiKey: '',
     model: 'google/gemma-4-31b-it',
@@ -98,7 +106,26 @@ const I18N = {
         set_level: 'Enable level (XP from defeated enemies + AI story milestones, max 100)',
         set_autoexpire: 'Fade effects with no set duration', set_autoexpire_max: 'random up to (messages):',
         set_mana: 'Enable mana (the story raises and spends it)',
-        set_fatigue: 'Enable fatigue (rises with exertion, falls with rest)'
+        set_fatigue: 'Enable fatigue (rises with exertion, falls with rest)',
+        sec_api: 'Connection', sec_health: 'Health & effects', sec_hunger: 'Hunger', sec_extra: 'Level, mana, fatigue', sec_scan: 'Reading the scene', sec_combat: 'Combat', sec_angel: 'Angel',
+        set_intimacy: 'Notice intimate scenes (afterglow, marks, soreness…)',
+        set_intimacy_hint: 'Works inside the same reading of the scene — no extra request. Needs "Auto-update from the story".',
+        intimacy_toast: 'After the night with {name}:', intimacy_toast_anon: 'After the intimate scene:',
+        set_ppill: 'I take the pill', set_pend: 'The pregnancy is over', p_end_done: 'The pregnancy is over; the cycle starts again.', p_prot: 'Protected: {what}', w_condom: 'a condom', w_pill: 'the pill', w_story: 'contraception in the scene', condom_bag: 'A condom from your backpack was used.',
+        sec_body: 'Your body', set_psex: 'Your body:', psex_none: '— not said —', psex_f: 'female', psex_m: 'male', psex_x: 'other',
+        set_pcycle: 'Menstrual cycle (rolled once for you)', set_ppreg: 'A chance of pregnancy after an intimate scene', set_phide: 'Keep it hidden until the period is late',
+        set_pday: 'Today is cycle day', set_pevery: 'No Scene Card date: a new day every N replies', set_preroll: 'Roll again',
+        p_rolls: 'Cycle {len} d, period {per} d, {pain}; {fert} (dice {r})', p_fert_y: 'can have children', p_fert_n: 'cannot have children',
+        pain0: 'no pain', pain1: 'mild cramps', pain2: 'cramps', pain3: 'strong cramps',
+        lbl_cycle: 'Cycle', cyc_day: 'day {d} of {n}', ph_period: 'Period', ph_follicular: 'Calm days', ph_ovulation: 'Ovulation', ph_luteal: 'Second half', ph_pms: 'Before the period',
+        late_n: 'Period late · {n} d', preg_w: 'Pregnant · {w} wk',
+        eff_period: 'Period', eff_period_d: ['uncomfortable, nothing more', 'mild cramps', 'cramps — hard to focus', 'strong cramps — wants to lie down'],
+        eff_pms: 'Before the period', eff_pms_d: 'touchier than usual, craves sweets',
+        eff_ovu: 'Ovulation', eff_ovu_d: 'more energy, drawn to closeness',
+        eff_late: 'Period late', eff_late_d: 'it has not come for {n} days',
+        eff_preg: 'Pregnancy', eff_preg_d: 'about {w} weeks — tires faster, sometimes nauseous',
+        eff_preg_t1: 'about {w} weeks — nauseous in the mornings, odd cravings', eff_preg_t2: 'about {w} weeks — the belly is starting to show', eff_preg_t3: 'about {w} weeks — heavy now, tires quickly, the back aches', eff_preg_term: '{w} weeks — the time has come, the first contractions come and go',
+        eff_baby: 'Newborn nights', eff_baby_d: 'a newborn keeps you up at night — short on sleep'
     },
     ru: {
         btn_title: 'HP и эффекты', panel_title: 'Состояние',
@@ -150,7 +177,26 @@ const I18N = {
         set_level: 'Включить уровень (опыт с побеждённых врагов + вехи от ИИ, макс 100)',
         set_autoexpire: 'Гасить эффекты без заданной длительности', set_autoexpire_max: 'рандом до (сообщений):',
         set_mana: 'Включить ману (сюжет её тратит и восполняет)',
-        set_fatigue: 'Включить усталость (растёт от нагрузки, падает при отдыхе)'
+        set_fatigue: 'Включить усталость (растёт от нагрузки, падает при отдыхе)',
+        sec_api: 'Подключение', sec_health: 'Здоровье и эффекты', sec_hunger: 'Голод', sec_extra: 'Уровень, мана, усталость', sec_scan: 'Чтение сцены', sec_combat: 'Бой', sec_angel: 'Ангел',
+        set_intimacy: 'Замечать интимные сцены (нега, следы, ломота…)',
+        set_intimacy_hint: 'Работает в том же чтении сцены — без отдельного запроса. Нужно «Авто-обновление из сюжета».',
+        intimacy_toast: 'После ночи с {name}:', intimacy_toast_anon: 'После интимной сцены:',
+        set_ppill: 'Принимаю противозачаточные', set_pend: 'Беременность закончилась', p_end_done: 'Беременность закончилась; цикл начинается заново.', p_prot: 'Защита: {what}', w_condom: 'презерватив', w_pill: 'таблетки', w_story: 'предохранялись по сюжету', condom_bag: 'Использован презерватив из твоего рюкзака.',
+        sec_body: 'Твоё тело', set_psex: 'Твоё тело:', psex_none: '— не указано —', psex_f: 'женское', psex_m: 'мужское', psex_x: 'другое',
+        set_pcycle: 'Менструальный цикл (бросается один раз)', set_ppreg: 'Шанс беременности после интимной сцены', set_phide: 'Скрывать, пока нет задержки',
+        set_pday: 'Сегодня день цикла', set_pevery: 'Без даты Scene Card: новый день каждые N ответов', set_preroll: 'Бросить заново',
+        p_rolls: 'Цикл {len} дн., месячные {per} дн., {pain}; {fert} (кубик {r})', p_fert_y: 'может иметь детей', p_fert_n: 'не может иметь детей',
+        pain0: 'без боли', pain1: 'слабые спазмы', pain2: 'спазмы', pain3: 'сильные спазмы',
+        lbl_cycle: 'Цикл', cyc_day: 'день {d} из {n}', ph_period: 'Месячные', ph_follicular: 'Спокойные дни', ph_ovulation: 'Овуляция', ph_luteal: 'Вторая половина', ph_pms: 'Перед месячными',
+        late_n: 'Задержка · {n} дн.', preg_w: 'Беременность · {w} нед.',
+        eff_period: 'Месячные', eff_period_d: ['неудобно, не больше', 'слабые спазмы', 'спазмы — трудно сосредоточиться', 'сильные спазмы — хочется лечь'],
+        eff_pms: 'Перед месячными', eff_pms_d: 'обидчивее обычного, тянет на сладкое',
+        eff_ovu: 'Овуляция', eff_ovu_d: 'больше сил, тянет к близости',
+        eff_late: 'Задержка', eff_late_d: 'месячные не пришли уже {n} дн.',
+        eff_preg: 'Беременность', eff_preg_d: 'около {w} нед. — быстрее устаёт, иногда подташнивает',
+        eff_preg_t1: 'около {w} нед. — подташнивает по утрам, тянет на странное', eff_preg_t2: 'около {w} нед. — живот уже начинает быть заметен', eff_preg_t3: 'около {w} нед. — тяжело, быстро устаёт, ноет спина', eff_preg_term: '{w} нед. — срок подошёл, первые схватки то приходят, то отпускают',
+        eff_baby: 'Ночи с малышом', eff_baby_d: 'новорождённый не даёт спать по ночам — не высыпаешься'
     }
 };
 /* {{user}} appears in eight strings — in the prompt injections and in two of the
@@ -408,7 +454,8 @@ function addBuff(b) {
         id: genId(), name: String(b.name), effect: String(b.effect || ''),
         kind: (b.kind === 'debuff') ? 'debuff' : 'buff',
         duration: dur, // null = until removed
-        tag: b.tag ? String(b.tag) : undefined // optional owner tag (e.g. "eq:weapon") for later removal
+        tag: b.tag ? String(b.tag) : undefined, // optional owner tag (e.g. "eq:weapon") for later removal
+        src: b.src === 'intimacy' ? 'intimacy' : undefined   // where it came from: shown with its own little mark, fades like any other
     };
     state.buffs.push(buff); saveState(); renderPanel(); buildInjection();
     return buff;
@@ -422,6 +469,200 @@ function removeBuff(key) {
     else { const i = state.buffs.findIndex(b => b.name === key); if (i >= 0) state.buffs.splice(i, 1); }
     if (state.buffs.length !== before) { saveState(); renderPanel(); buildInjection(); }
 }
+
+/* ---- the player's own cycle ----
+   For a woman player who switched it on. Rolled once per persona and kept for good; the day
+   comes from the Scene Card's date when there is one, from the number of replies when not.
+   What it does is told through ordinary effects (a sticky "cycle" tag), so the card shows
+   it and the main model hears of it the way it hears of every other effect. */
+function tArr(key) { const L = settings.language === 'ru' ? 'ru' : 'en'; const v = (I18N[L] || I18N.en)[key]; return Array.isArray(v) ? v : (I18N.en[key] || []); }
+function vd100() { return 1 + Math.floor(Math.random() * 100); }
+function personaKey() { return String(playerName() || 'User').trim().toLowerCase(); }
+function rollPlayerTraits() {
+    const r = { fert: vd100(), len: vd100(), period: vd100(), pain: vd100() };
+    return {
+        fertile: r.fert > 12,
+        len: 25 + Math.floor((r.len - 1) / 100 * 9),
+        period: 3 + Math.floor((r.period - 1) / 100 * 5),
+        pain: r.pain <= 20 ? 0 : r.pain <= 62 ? 1 : r.pain <= 88 ? 2 : 3,
+        rolls: r, at: Date.now()
+    };
+}
+function playerTraits() {
+    if (!settings.playerTraits || typeof settings.playerTraits !== 'object') settings.playerTraits = {};
+    const k = personaKey();
+    if (!settings.playerTraits[k]) { settings.playerTraits[k] = rollPlayerTraits(); saveSettings(); }
+    return settings.playerTraits[k];
+}
+function cycleOn() { return !!(settings.enabled && settings.playerSex === 'f' && settings.playerCycle); }
+function cycleState() {
+    if (!state) return null;
+    if (!state.cycle || typeof state.cycle !== 'object') {
+        const tr = playerTraits();
+        state.cycle = { day: 1, dateKey: '', tick: 0, start: 1 - Math.floor(Math.random() * tr.len), preg: null, turn: 0, lastIntim: -99 };
+    }
+    return state.cycle;
+}
+function playerCycleInfo() {
+    if (!cycleOn()) return null;
+    const tr = playerTraits(), c = cycleState();
+    if (!c) return null;
+    const len = Math.max(21, Math.min(40, tr.len || 28)), per = Math.max(2, Math.min(9, tr.period || 5));
+    if (c.preg) {
+        // counted on the pregnancy's own days (gd), a story day adding the Character tab's speed of them
+        const expect = c.start + len * Math.max(1, Math.ceil((c.preg.day - c.start + 1) / len));
+        const gd = pregDays(c);
+        if (!Number.isFinite(c.preg.due)) c.preg.due = 266 + Math.round((vd100() - 50) / 5);   // about forty weeks, rolled once
+        const late = Math.max(0, Math.floor(gd - (expect - c.preg.day)));
+        const weeks = Math.max(1, Math.floor(gd / 7) + 2);
+        const trim = weeks <= 13 ? 1 : weeks <= 27 ? 2 : 3;
+        return { preg: true, late, weeks, trim, gd, due: c.preg.due, term: gd >= c.preg.due, known: !settings.playerHidePreg || late >= 14 || weeks >= 14, len, per };
+    }
+    const cd = ((((c.day - c.start) % len) + len) % len) + 1;
+    const ovu = len - 14;
+    let phase = 'follicular';
+    if (cd <= per) phase = 'period';
+    else if (cd >= ovu - 1 && cd <= ovu + 1) phase = 'ovulation';
+    else if (cd >= len - 3) phase = 'pms';
+    else if (cd > ovu + 1) phase = 'luteal';
+    return { preg: false, cd, len, per, phase, ovu, fertile: cd >= ovu - 5 && cd <= ovu + 1, pain: tr.pain || 0 };
+}
+/* the pregnancy's days and speed: the speed is the Character tab's (RPG Status Bar + Bonds) — one
+   story day is one day, a week or a month of the pregnancy; without it, one day */
+function pregSpeedNow() {
+    try { const b = window.RPG && window.RPG.body; const v = b && b.available && b.pregSpeed ? +b.pregSpeed() : 1; return v === 7 || v === 30 ? v : 1; } catch (e) { return 1; }
+}
+function pregDays(c) {
+    const p = c.preg;
+    if (!Number.isFinite(p.gd)) { p.gd = Math.max(0, c.day - p.day); p.gdDay = c.day; }   // a pregnancy from before: its days so far
+    if (!Number.isFinite(p.gdDay)) p.gdDay = c.day;
+    if (c.day !== p.gdDay) { p.gd = Math.max(0, p.gd + (c.day - p.gdDay) * pregSpeedNow()); p.gdDay = c.day; }
+    return p.gd;
+}
+function nextDay(c) {
+    c.day += 1;
+    if (c.preg) pregDays(c);
+}
+// the speed is about to change in the Character tab: what has passed stays counted at the old one
+window.addEventListener('rpg:preg-speed', () => { try { syncChat(); const c = state && state.cycle; if (c && c.preg) { pregDays(c); saveState(); } } catch (e) { /* later */ } });
+// her term: the birth goes to the Character tab's clipping (once it takes it)
+function checkPlayerTerm() {
+    const c = cycleState(); if (!c || !c.preg || c.preg.labor) return;
+    const ci = playerCycleInfo(); if (!ci || !ci.preg || !ci.term) return;
+    try {
+        const b = window.RPG && window.RPG.body;
+        if (b && b.available && b.labor && b.labor({ mother: playerName(), father: c.preg.father || (c.lastRoll && c.lastRoll.with) || '', weeks: ci.weeks })) { c.preg.labor = true; saveState(); }
+    } catch (e) { /* no Character tab */ }
+}
+// a newborn nobody else looks after: the player does not sleep either (the Character tab knows the children)
+function syncBabyEffect() {
+    if (!state) return;
+    let want = false;
+    try { const b = window.RPG && window.RPG.body; want = !!(settings.enabled && b && b.available && b.babyNights && b.babyNights(playerName())); } catch (e) { want = false; }
+    const cur = state.buffs.find(b => b.tag === 'baby');
+    if (!!cur === want) return;
+    if (cur) { state.buffs = state.buffs.filter(b => b.tag !== 'baby'); saveState(); renderPanel(); buildInjection(); }
+    else addBuff({ name: t('eff_baby'), effect: t('eff_baby_d'), kind: 'debuff', tag: 'baby' });
+}
+// the sticky effect of the day: replaced when the phase changes, gone when there is nothing to say
+function syncCycleEffect() {
+    if (!state) return;
+    const ci = playerCycleInfo();
+    let want = null;
+    if (ci) {
+        if (ci.preg) {
+            if (ci.known) want = { name: t('eff_preg'), effect: ci.term ? t('eff_preg_term', { w: ci.weeks }) : ci.weeks >= 5 ? t('eff_preg_t' + ci.trim, { w: ci.weeks }) : t('eff_preg_d', { w: ci.weeks }), kind: 'buff' };
+            else if (ci.late >= 1) want = { name: t('eff_late'), effect: t('eff_late_d', { n: ci.late }), kind: 'debuff' };
+        } else if (ci.phase === 'period') want = { name: t('eff_period'), effect: tArr('eff_period_d')[ci.pain] || '', kind: 'debuff' };
+        else if (ci.phase === 'pms') want = { name: t('eff_pms'), effect: t('eff_pms_d'), kind: 'debuff' };
+        else if (ci.phase === 'ovulation') want = { name: t('eff_ovu'), effect: t('eff_ovu_d'), kind: 'buff' };
+    }
+    const cur = state.buffs.find(b => b.tag === 'cycle');
+    const same = cur && want && cur.name === want.name && cur.effect === want.effect && cur.kind === want.kind;
+    if (same || (!cur && !want)) return;
+    if (cur) state.buffs = state.buffs.filter(b => b.tag !== 'cycle');
+    if (want) addBuff(Object.assign(want, { tag: 'cycle' }));   // tagged: it stays until the phase ends
+    else { saveState(); renderPanel(); buildInjection(); }
+}
+// one bot reply: the day moves on when the Scene Card's date does, or every N replies without it
+function cycleTick() {
+    if (!cycleOn()) { if (state && state.buffs.some(b => b.tag === 'cycle')) { state.buffs = state.buffs.filter(b => b.tag !== 'cycle'); saveState(); renderPanel(); buildInjection(); } return; }
+    const c = cycleState(); if (!c) return;
+    c.turn += 1;
+    let sc = null;
+    try { sc = window.RPG && window.RPG.scene && window.RPG.scene.available && window.RPG.scene.get ? window.RPG.scene.get() : null; } catch (e) { sc = null; }
+    const dk = sc && sc.date ? String(sc.date).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() : '';
+    if (dk) {
+        if (c.dateKey && dk !== c.dateKey) nextDay(c);
+        c.dateKey = dk;
+    } else {
+        c.tick += 1;
+        if (c.tick >= Math.max(4, parseInt(settings.cycleDayEvery, 10) || 30)) { c.tick = 0; nextDay(c); }
+    }
+    saveState();
+    syncCycleEffect();
+    checkPlayerTerm();
+}
+// a night together: one roll, by the day of her cycle (Vitals' own scene reading and Bonds both report it)
+function onPlayerIntimacy(detail) {
+    try {
+        if (!detail || detail.level !== 'sex' || !cycleOn() || !settings.playerPregnancy) return;
+        if (detail.chatId && detail.chatId !== currentChatId) return;
+        const c = cycleState(); if (!c || c.preg) return;
+        if (c.turn - c.lastIntim <= 2) return;
+        c.lastIntim = c.turn;
+        const tr = playerTraits();
+        // a woman partner (as the Character tab knows her): no child from this night
+        try { const pt = ((extension_settings.rpg_body || {}).traits || {})[String(detail.with || '').trim().toLowerCase()]; if (pt && pt.sex === 'f') { saveState(); return; } } catch (e) { /* not known */ }
+        if (!tr.fertile) { saveState(); return; }
+        const ci = playerCycleInfo();
+        let chance = !ci || ci.preg ? 0 : ci.phase === 'period' ? 0.5 : (ci.cd === ci.ovu - 1 || ci.cd === ci.ovu) ? 30 : ci.fertile ? 15 : 1;
+        // protection: the scene showed it, a condom (the partner's pocket or your backpack — used once), the pill
+        const what = [];
+        if (detail.protected) { chance *= 0.1; what.push(t('w_story')); }
+        else if (playerCondom(detail)) { chance *= 0.1; what.push(t('w_condom')); }
+        if (settings.playerPill) { chance *= 0.02; what.push(t('w_pill')); }
+        chance = Math.round(chance * 100) / 100;
+        const roll = vd100();
+        if (roll <= chance) c.preg = { day: c.day, roll, chance, gd: 0, gdDay: c.day, father: String(detail.with || '') };
+        c.lastRoll = { roll, chance, with: String(detail.with || ''), day: c.day, protection: what };
+        saveState();
+        syncCycleEffect();
+    } catch (e) { console.warn('[RPG Vitals] cycle', e); }
+}
+window.addEventListener('rpg:intimacy', e => { syncChat(); onPlayerIntimacy(e && e.detail); });
+const CONDOM_RE = /презерватив|кондом|condom|rubber/i;
+function playerCondom(detail) {
+    if (detail.condomUsed) return true;
+    try {
+        // the partner's pocket first (RPG Status Bar + Bonds' Character tab), then the player's backpack
+        const body = window.RPG && window.RPG.body;
+        if (body && body.available && body.useCondom && detail.with && body.useCondom(detail, detail.with)) return true;
+        const inv = window.RPG && window.RPG.inventory;
+        const hit = inv && inv.available ? (inv.list() || []).find(x => CONDOM_RE.test(x.name)) : null;
+        if (hit) { inv.remove(hit.id); detail.condomUsed = true; toastr.info(t('condom_bag')); return true; }
+    } catch (e) { /* no backpack */ }
+    return false;
+}
+// how: undefined — the story ended it; 'birth' — the Character tab delivered the baby; 'manual' — the button
+function endPlayerPregnancy(how) {
+    const c = cycleState(); if (!c || !c.preg) return;
+    const quiet = how === 'birth';
+    try {
+        const b = window.RPG && window.RPG.body;
+        // the story ended it while the birth was waiting in the Character tab: that was the birth (the child is made there)
+        if (!how && b && b.available && b.laborPending && b.laborPending() && b.born()) return;
+        // ended by hand: the waiting clipping goes too
+        if (how === 'manual' && b && b.available && b.cancelLabor) b.cancelLabor();
+    } catch (e) { /* no Character tab */ }
+    c.preg = null; c.start = c.day;
+    saveState(); syncCycleEffect();
+    if (!quiet) toastr.info(t('p_end_done'));
+}
+// the Character tab delivered the player's baby
+window.addEventListener('rpg:birth', e => {
+    try { const d = e && e.detail; if (!d || !d.player) return; syncChat(); if (d.chatId && d.chatId !== currentChatId) return; endPlayerPregnancy('birth'); } catch (err) { console.warn('[RPG Vitals] birth', err); }
+});
 
 // ---- combat / enemies ----
 function playerAttackPower() {
@@ -639,7 +880,7 @@ async function analyzeMessage(messageId, opts) {
             const askSat = settings.hungerEnabled ? `\n"satiety_delta": satiety GAINED by eating/drinking THIS message — POSITIVE 0..40 (snack ~10, meal ~30, drink ~5-15), else 0.` : '';
             const askMana = settings.manaEnabled ? `\n"mana_delta": mana RECOVERED by resting/meditating/a potion THIS message — POSITIVE 0..40, else 0.` : '';
             const askFat = settings.fatigueEnabled ? `\n"fatigue_delta": NEGATIVE if they rested/slept (recovered), 0 otherwise.` : '';
-            const sysS = `The player "${whoS}" (currently ${state.hp}/${state.maxHp} HP) just narrated an action about THEMSELVES. Report only self-care they actually did.
+            const sysS = `The player "${whoS}" (currently ${state.hp}/${state.maxHp} HP) just narrated an action about THEMSELVES. Report only self-care they actually did. Giving food or drink to someone else is not eating: satiety 0 then.
 "hp_delta": HP RECOVERED by tending a wound / first aid / resting / a healing potion THIS message — a POSITIVE, REALISTIC number. Basic first aid or a bandage restores only a LITTLE (about 5-15); real rest or a good remedy more (15-35); a potent healing potion most. It must NEVER fully heal from one ordinary bandage. 0 if no real healing happened.${askSat}${askMana}${askFat}
 Optionally "add_effects": one short effect if clearly granted (e.g. "Bandaged", "Rested"), else empty.
 Write effect names in ${genLang()}. Output strictly JSON: {"hp_delta":0${settings.hungerEnabled ? ',"satiety_delta":0' : ''}${settings.manaEnabled ? ',"mana_delta":0' : ''}${settings.fatigueEnabled ? ',"fatigue_delta":0' : ''},"add_effects":[]}`;
@@ -674,10 +915,17 @@ Write effect names in ${genLang()}. Output strictly JSON: {"hp_delta":0${setting
         // build the JSON schema + rules only for the enabled optional stats
         let fields = '"hp_delta":0,"add_effects":[{"name":"","effect":"","kind":"buff","duration":3}],"remove_effects":[]';
         let rules = `\n- "hp_delta": negative if "${getContext().name1 || 'the player'}" got physically HURT this message (a scratch ~3-8, a solid wound ~10-25, a grave injury ~30-45), positive if they actually healed (bandage ~5-15, treatment/rest ~15-35). 0 if neither.`;
-        if (settings.hungerEnabled) { fields += ',"satiety_delta":0'; rules += `\n- "satiety_delta": +N when "${who}" EATS or DRINKS this message (fuller: a snack ~10, a meal ~30, a drink ~5-15). Eating or drinking is ALWAYS positive. Use a negative number ONLY if the text explicitly shows a long stretch with no food at all. Otherwise 0.`; }
+        if (settings.hungerEnabled) { fields += ',"satiety_delta":0'; rules += `\n- "satiety_delta": +N when "${who}" EATS or DRINKS this message (fuller: a snack ~10, a meal ~30, a drink ~5-15). Only "${who}"'s OWN eating or drinking counts: someone else eating — even food "${who}" gave them — is 0. Eating or drinking is ALWAYS positive. Use a negative number ONLY if the text explicitly shows a long stretch with no food at all. Otherwise 0.`; }
         if (settings.manaEnabled) { fields += ',"mana_delta":0'; rules += `\n- "mana_delta": mana "${who}" spent (negative, e.g. casting/using magic) or recovered (positive, e.g. rest/potion/meditation) THIS message.`; }
         if (settings.fatigueEnabled) { fields += ',"fatigue_delta":0'; rules += `\n- "fatigue_delta": how much MORE tired "${who}" got (positive: hard exertion, fighting, sprinting, no sleep) or how much they recovered (negative: rest/sleep) THIS message.`; }
         if (settings.levelEnabled) { fields += ',"xp_delta":0'; rules += `\n- "xp_delta": experience for a real achievement by "${who}" THIS message (finishing a quest, a big victory, a breakthrough) — usually 0, occasionally 10–40. Do NOT award xp just for talking.`; }
+        /* Intimate scenes leave traces on the body too — read here, in the same request, never in
+           one of their own. The effects are ordinary effects with a duration; the scene itself is
+           reported once ("intimacy" + with whom) so other modules (Bonds) can react to it. */
+        const askIntimacy = !!settings.intimacyEnabled;
+        const pregNow = (() => { try { const ci = playerCycleInfo(); return !!(ci && ci.preg); } catch (e) { return false; } })();
+        if (pregNow) { fields += ',"pregnancy_ended":false'; rules += `\n- "pregnancy_ended": true only if THIS message clearly ends "${who}"'s pregnancy (a birth, a miscarriage, an abortion).`; }
+        if (askIntimacy) { fields += ',"intimacy":"none","intimacy_with":"","intimacy_protected":false'; rules += `\n- "intimacy": what intimate contact "${who}" personally had THIS message — "none"; "romantic" (a real kiss, a long embrace, sleeping in someone's arms); or "sex" (making love / a sexual scene, including its aftermath the morning after). Talking about it or wanting it is "none". "intimacy_with": the partner's name, or "". "intimacy_protected": true only if the scene clearly shows a condom or other contraception used.\n- When "intimacy" is not "none", add 1–2 fitting effects to "add_effects", each with "src":"intimacy" and a duration of 3–12 messages: a buff for what it gave (afterglow, calm, warmth, a good mood, being well rested) and/or a debuff for what it left (a visible mark such as a hickey, a bite mark or scratches; soreness; a sleepless night; tousled hair). The description says in one short sentence how it feels or how it shows to others. Tasteful, never explicit. Do not add one that is already among the current effects.`; }
 
         /* Everyone in the scene has a body, and the model was being asked to watch one
            of them while reading about all of them. A single line naming the partner was
@@ -748,9 +996,27 @@ Output strictly JSON: {${fields}}`;
         if (settings.manaEnabled && typeof res.mana_delta === 'number' && res.mana_delta !== 0) { addMana(res.mana_delta); notes.push(`${t('mana_word')} ${res.mana_delta > 0 ? '+' : ''}${res.mana_delta}`); }
         if (settings.fatigueEnabled && typeof res.fatigue_delta === 'number' && res.fatigue_delta !== 0) { addFatigue(res.fatigue_delta); notes.push(`${t('fatigue_word')} ${res.fatigue_delta > 0 ? '+' : ''}${res.fatigue_delta}`); }
         if (settings.levelEnabled && typeof res.xp_delta === 'number' && res.xp_delta > 0) { addXp(res.xp_delta); notes.push(`${t('xp')} +${res.xp_delta}`); }
-        for (const e of (Array.isArray(res.add_effects) ? res.add_effects : [])) if (e && e.name) { addBuff(e); notes.push((e.kind === 'debuff' ? '−' : '+') + escapeHtml(e.name)); }
+        const intim = askIntimacy ? String(res.intimacy || 'none').toLowerCase() : 'none';
+        const intimNotes = [];
+        for (const e of (Array.isArray(res.add_effects) ? res.add_effects : [])) {
+            if (!e || !e.name) continue;
+            const fromIntim = e.src === 'intimacy';
+            if (fromIntim && (!askIntimacy || intim === 'none')) continue;   // switched off, or nothing happened: no "marks" out of thin air
+            if (fromIntim && state.buffs.some(b => b.name.toLowerCase() === String(e.name).toLowerCase())) continue;   // the same mark twice is one mark
+            addBuff(e);
+            (fromIntim ? intimNotes : notes).push((e.kind === 'debuff' ? '−' : '+') + escapeHtml(e.name));
+        }
         for (const nm of (Array.isArray(res.remove_effects) ? res.remove_effects : [])) { const b = state.buffs.find(x => x.name === nm); if (b) removeBuff(b.id); }
         if (notes.length) toastr.info(t('auto_changed') + ' ' + notes.join(', '));
+        if (pregNow && (res.pregnancy_ended === true || res.pregnancy_ended === 'true')) endPlayerPregnancy();
+        if (askIntimacy && (intim === 'romantic' || intim === 'sex')) {
+            const withWhom = String(res.intimacy_with || '').trim().slice(0, 60);
+            if (intimNotes.length) toastr.info((withWhom ? t('intimacy_toast', { name: escapeHtml(withWhom) }) : t('intimacy_toast_anon')) + ' ' + intimNotes.join(', '));
+            // told once, to whoever listens (RPG Status Bar + Bonds keeps the character's cycle)
+            const detail = { level: intim, with: withWhom, messageId, chatId: myChat, at: Date.now(), protected: res.intimacy_protected === true || res.intimacy_protected === 'true' };
+            state.lastIntimacy = detail; saveState();
+            try { window.dispatchEvent(new CustomEvent('rpg:intimacy', { detail })); } catch (e) { /* nobody listening */ }
+        }
     } catch (e) { /* silent: don't disrupt chat on API errors */ } finally { vitalsBusy = false; }
 }
 async function analyzeCombat(messageId) {
@@ -855,6 +1121,8 @@ function onBotMessage(id) {
     if (msg.rpg_vitals_done === true) return; // already handled — this fire is a swipe / regen
     msg.rpg_vitals_done = true;               // mark up-front so re-entrant fires are ignored too
     tickBuffs(id);
+    try { cycleTick(); } catch (e) { console.warn('[RPG Vitals] cycle', e); }
+    try { syncBabyEffect(); } catch (e) { console.warn('[RPG Vitals] baby', e); }
     // combat first: the narrative scan then only skips damage that combat ALREADY took.
     // Previously combatAuto discarded ALL narrative damage — a story wound outside a
     // tracked fight (a trap, a fall, an ambush) left HP untouched ("wounded at HP 99").
@@ -1502,7 +1770,8 @@ function structSig() {
         settings.language, !!settings.gmControls, !!settings.hungerEnabled, !!settings.manaEnabled,
         !!settings.fatigueEnabled, !!settings.levelEnabled, flat,
         state.buffs.length === 0 ? 'empty' : 'has', buffs,
-        (settings.gmControls || state.enemies.length) ? 'combat' : 'nocombat', enemies
+        (settings.gmControls || state.enemies.length) ? 'combat' : 'nocombat', enemies,
+        (() => { const ci = playerCycleInfo(); return ci ? (ci.preg ? `p${ci.known ? 'k' : ''}${ci.late}:${ci.weeks}` : `${ci.phase}:${ci.cd}`) : 'nocycle'; })()
     ].join('|');
 }
 
@@ -1594,6 +1863,20 @@ function buildPanel() {
         </svg>
     </div>`;
 
+    // the player's cycle: a small dial and the phase, on the same paper
+    const cycleBlock = (() => {
+        const ci = playerCycleInfo();
+        if (!ci) return '';
+        const FLOWER = '<svg viewBox="0 0 24 24" fill="none" stroke="#b04a6e" stroke-width="1.7"><circle cx="12" cy="12" r="2.4"/><path d="M12 9.6C10.5 6 13.5 6 12 9.6M14.4 12C18 10.5 18 13.5 14.4 12M12 14.4C13.5 18 10.5 18 12 14.4M9.6 12C6 13.5 6 10.5 9.6 12"/></svg>';
+        let txt, dial = '';
+        if (ci.preg) txt = ci.known ? t('preg_w', { w: ci.weeks }) : ci.late >= 1 ? t('late_n', { n: ci.late }) : t('ph_luteal');
+        else { txt = `${t('ph_' + ci.phase)} · ${t('cyc_day', { d: ci.cd, n: ci.len })}${ci.phase === 'period' ? ' · ' + t('pain' + ci.pain) : ''}`; dial = `<span class="vex-cyc-dial" style="--p:${Math.round(ci.cd / ci.len * 100)}"><i>${ci.cd}</i></span>`; }
+        return `<div class="vex-vital vex-cycle ph-${ci.preg ? 'preg' : ci.phase}">
+            <div class="vex-vlabel"><div class="left">${FLOWER}<span class="vex-k">${escapeHtml(t('lbl_cycle'))}</span></div></div>
+            <div class="vex-cyc-row">${dial}<span class="vex-cyc-t">${escapeHtml(txt)}</span></div>
+        </div>`;
+    })();
+
     // satiety ration cells
     const filled = Math.max(0, Math.min(10, Math.round((state.hunger || 0) / 10)));
     const cells = Array.from({ length: 10 }, (_, i) => `<i class="${i < filled ? 'on' : ''}"></i>`).join('');
@@ -1627,14 +1910,14 @@ function buildPanel() {
     } else {
         slots = state.buffs.map(b => {
             const deb = b.kind === 'debuff';
-            return `<div class="vex-s filled ${deb ? 'debuff' : ''}" data-bid="${b.id}" title="${escapeHtml(b.name + (b.effect ? ' — ' + b.effect : ''))}">
+            return `<div class="vex-s filled ${deb ? 'debuff' : ''}${b.src === 'intimacy' ? ' intim' : ''}" data-bid="${b.id}" title="${escapeHtml(b.name + (b.effect ? ' — ' + b.effect : ''))}">
                 ${deb ? DOWN : UP}
                 ${b.duration == null ? '' : `<span class="vex-dur">${b.duration}</span>`}
                 ${gm ? `<span class="vex-b-del rpg-vit-b-del" data-id="${b.id}">✕</span>` : ''}
             </div>`;
         }).join('');
-        efflist = `<div class="vex-efflist">` + state.buffs.map(b => `<div class="vex-efl ${b.kind === 'debuff' ? 'debuff' : ''}" data-bid="${b.id}">
-            <span class="vex-efl-n">${escapeHtml(b.name)}</span>
+        efflist = `<div class="vex-efflist">` + state.buffs.map(b => `<div class="vex-efl ${b.kind === 'debuff' ? 'debuff' : ''}${b.src === 'intimacy' ? ' intim' : ''}" data-bid="${b.id}">
+            <span class="vex-efl-n">${b.src === 'intimacy' ? '<i class="fa-solid fa-heart vex-love" aria-hidden="true"></i>' : ''}${escapeHtml(b.name)}</span>
             <span class="vex-efl-e">${b.effect ? escapeHtml(b.effect) : ''}</span>
             <span class="vex-efl-d">${b.duration == null ? escapeHtml(t('forever')) : b.duration}</span>
         </div>`).join('') + `</div>`;
@@ -1714,6 +1997,7 @@ function buildPanel() {
             <div class="vex-cells mana js-mana-cells">${manaCells}</div>
             ${manaCtrl}
         </div>` : ''}
+        ${cycleBlock}
         ${settings.fatigueEnabled ? `<div class="vex-vital">
             <div class="vex-vlabel"><div class="left">${FATIGUE}<span class="vex-k">${escapeHtml(t('lbl_fatigue'))}</span></div><span class="vex-v js-fat-v">${state.fatigue} / 100</span></div>
             <div class="vex-cells fatigue js-fat-cells">${fatCells}</div>
@@ -1795,6 +2079,13 @@ function fitCard() {
 
 // ---- settings ----
 function settingsHtml() {
+    // open groups in frames, with an emoji each — as RPG Map, Character Lens and Living Scene have them
+    const sub = (title, body) => `
+            <div class="rpg-vit-sub">
+                <div class="rpg-vit-subhead">${title}</div>${body}
+            </div>`;
+    const num = (label, id, attrs) => `<div class="rpg-vit-srow"><label for="${id}">${label}</label><input type="number" id="${id}" class="text_pole" ${attrs}></div>`;
+    const chk = (id, label, extra = '') => `<label class="checkbox_label"${extra}><input type="checkbox" id="${id}"> <span>${label}</span></label>`;
     return `
 <div class="extension_settings rpg-vit-settings">
     <div class="inline-drawer">
@@ -1802,73 +2093,66 @@ function settingsHtml() {
             <b><i class="fa-solid fa-heart-pulse"></i> ${t('set_title')}</b>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
-        <div class="inline-drawer-content" style="display: none; padding-top: 10px;">
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-enabled"> ${t('set_enable')}</label>
-            <div class="flex-container alignitemscenter flexgap5 margin-b-10" style="margin-top:8px;">
-                <label>${t('set_lang')}</label>
-                <select id="rpg-vit-lang" class="text_pole" style="width:auto;">
+        <div class="inline-drawer-content" style="display: none; padding-top: 6px;">
+            <div class="rpg-vit-top">
+                ${chk('rpg-vit-enabled', t('set_enable'))}
+                <select id="rpg-vit-lang" class="text_pole" title="${escapeHtml(t('set_lang'))}" aria-label="${escapeHtml(t('set_lang'))}">
                     <option value="en">English</option>
                     <option value="ru">Русский</option>
                 </select>
             </div>
-            <div class="flex-container alignitemscenter flexgap5 margin-b-10">
-                <label>${t('set_maxhp')}</label>
-                <input type="number" id="rpg-vit-maxhp" class="text_pole" min="1" style="width:64px;">
-            </div>
-            <div class="flex-container alignitemscenter flexgap5 margin-b-10">
-                <label>${t('set_depth')}</label>
-                <input type="number" id="rpg-vit-depth" class="text_pole" min="0" style="width:55px;">
-            </div>
-            <hr style="border-color:#d8ccae;">
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-hunger-en"> ${t('set_hunger')}</label>
-            <div class="flex-container alignitemscenter flexgap5 margin-b-10" style="margin-top:6px;">
-                <label>${t('set_hunger_every')}</label>
-                <input type="number" id="rpg-vit-hunger-every" class="text_pole" min="1" style="width:55px;">
-            </div>
-            <div class="flex-container alignitemscenter flexgap5 margin-b-10">
-                <label>${t('set_hunger_amount')}</label>
-                <input type="number" id="rpg-vit-hunger-amt" class="text_pole" min="1" style="width:55px;">
-            </div>
-            <div class="flex-container alignitemscenter flexgap5 margin-b-10">
-                <label>${t('set_starve_dmg')}</label>
-                <input type="number" id="rpg-vit-starve-dmg" class="text_pole" min="0" style="width:55px;">
-            </div>
-            <hr style="border-color:#d8ccae;">
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-autoexpire"> ${t('set_autoexpire')}</label>
-            <div class="flex-container alignitemscenter flexgap5 margin-b-10" style="padding-left:22px;">
-                <label>${t('set_autoexpire_max')}</label>
-                <input type="number" id="rpg-vit-autoexpire-max" class="text_pole" min="1" max="200" style="width:55px;">
-            </div>
-            <hr style="border-color:#d8ccae;">
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-level-en"> ${t('set_level')}</label>
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-mana-en"> ${t('set_mana')}</label>
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-fatigue-en"> ${t('set_fatigue')}</label>
-            <hr style="border-color:#d8ccae;">
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-gm"> ${t('set_gm')}</label>
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-angel"> ${t('angel_set')}</label>
-            <div class="rpg-vit-note">${t('angel_hint')}</div>
-            <label class="rpg-vit-row"><span>${t('angel_depth')}</span>
-                <input type="number" id="rpg-vit-angel-depth" class="text_pole" min="2" max="30" step="1" style="width:70px;"></label>
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-autodetect"> ${t('set_autodetect')}</label>
-            <hr style="border-color:#d8ccae;">
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-combat-inject"> ${t('set_combat_inject')}</label>
-            <div class="flex-container alignitemscenter flexgap5 margin-b-10" style="margin-top:6px;">
-                <label>${t('set_combat_depth')}</label>
-                <input type="number" id="rpg-vit-combat-depth" class="text_pole" min="0" style="width:55px;">
-            </div>
-            <label class="checkbox_label"><input type="checkbox" id="rpg-vit-combat-auto"> ${t('set_combat_auto')}</label>
-            <div class="flex-container alignitemscenter flexgap5 margin-b-10" style="margin-top:6px;">
-                <label>${t('set_combat_scan')}</label>
-                <input type="number" id="rpg-vit-combat-scan" class="text_pole" min="1" max="10" style="width:55px;">
-            </div>
-            <div class="flex-container flexFlowColumn flexgap5" style="margin-top:6px;">
-                <label>${t('set_url')}</label>
-                <input type="text" id="rpg-vit-url" class="text_pole" placeholder="https://openrouter.ai/api/v1">
-                <label>${t('set_key')}</label>
-                <input type="password" id="rpg-vit-key" class="text_pole" placeholder="sk-...">
-                <label>${t('set_model')}</label>
-                <input type="text" id="rpg-vit-model" class="text_pole" placeholder="google/gemma-4-31b-it">
-            </div>
+            ${sub(`🔌 ${t('sec_api')}`, `
+                <input type="text" id="rpg-vit-url" class="text_pole" placeholder="${escapeHtml(t('set_url'))} https://openrouter.ai/api/v1" aria-label="${escapeHtml(t('set_url'))}">
+                <input type="password" id="rpg-vit-key" class="text_pole" placeholder="${escapeHtml(t('set_key'))} sk-..." aria-label="${escapeHtml(t('set_key'))}">
+                <input type="text" id="rpg-vit-model" class="text_pole" placeholder="${escapeHtml(t('set_model'))} google/gemma-4-31b-it" aria-label="${escapeHtml(t('set_model'))}">`)}
+            ${sub(`❤️ ${t('sec_health')}`, `
+                ${num(t('set_maxhp'), 'rpg-vit-maxhp', 'min="1"')}
+                ${num(t('set_depth'), 'rpg-vit-depth', 'min="0"')}
+                ${chk('rpg-vit-autoexpire', t('set_autoexpire'))}
+                <div class="rpg-vit-in">${num(t('set_autoexpire_max'), 'rpg-vit-autoexpire-max', 'min="1" max="200"')}</div>
+                ${chk('rpg-vit-gm', t('set_gm'))}`)}
+            ${sub(`🍖 ${t('sec_hunger')}`, `
+                ${chk('rpg-vit-hunger-en', t('set_hunger'))}
+                <div class="rpg-vit-in">
+                    ${num(t('set_hunger_every'), 'rpg-vit-hunger-every', 'min="1"')}
+                    ${num(t('set_hunger_amount'), 'rpg-vit-hunger-amt', 'min="1"')}
+                    ${num(t('set_starve_dmg'), 'rpg-vit-starve-dmg', 'min="0"')}
+                </div>`)}
+            ${sub(`🧬 ${t('sec_extra')}`, `
+                ${chk('rpg-vit-level-en', t('set_level'))}
+                ${chk('rpg-vit-mana-en', t('set_mana'))}
+                ${chk('rpg-vit-fatigue-en', t('set_fatigue'))}`)}
+            ${sub(`🌸 ${t('sec_body')}`, `
+                <div class="rpg-vit-srow"><label for="rpg-vit-psex">${t('set_psex')}</label><select id="rpg-vit-psex" class="text_pole">
+                    <option value="">${t('psex_none')}</option><option value="f">${t('psex_f')}</option><option value="m">${t('psex_m')}</option><option value="x">${t('psex_x')}</option></select></div>
+                <div class="rpg-vit-fem">
+                    ${chk('rpg-vit-pcycle', t('set_pcycle'))}
+                    <div class="rpg-vit-in">
+                        <div class="rpg-vit-note" id="rpg-vit-prolls"></div>
+                        ${num(t('set_pday'), 'rpg-vit-pday', 'min="1" max="40"')}
+                        ${chk('rpg-vit-ppill', t('set_ppill'))}
+                        ${chk('rpg-vit-ppreg', t('set_ppreg'))}
+                        <div class="rpg-vit-in">${chk('rpg-vit-phide', t('set_phide'))}</div>
+                        <button type="button" class="menu_button rpg-vit-reroll" id="rpg-vit-pend" style="display:none;">${t('set_pend')}</button>
+                        ${num(t('set_pevery'), 'rpg-vit-pevery', 'min="4" max="200"')}
+                        <button type="button" class="menu_button rpg-vit-reroll" id="rpg-vit-preroll">🎲 ${t('set_preroll')}</button>
+                    </div>
+                </div>`)}
+            ${sub(`🔍 ${t('sec_scan')}`, `
+                ${chk('rpg-vit-autodetect', t('set_autodetect'))}
+                <div class="rpg-vit-in">
+                    ${chk('rpg-vit-intimacy', t('set_intimacy'))}
+                    <div class="rpg-vit-note">${t('set_intimacy_hint')}</div>
+                </div>`)}
+            ${sub(`⚔️ ${t('sec_combat')}`, `
+                ${chk('rpg-vit-combat-auto', t('set_combat_auto'))}
+                <div class="rpg-vit-in">${num(t('set_combat_scan'), 'rpg-vit-combat-scan', 'min="1" max="10"')}</div>
+                ${chk('rpg-vit-combat-inject', t('set_combat_inject'))}
+                <div class="rpg-vit-in">${num(t('set_combat_depth'), 'rpg-vit-combat-depth', 'min="0"')}</div>`)}
+            ${sub(`🕯️ ${t('sec_angel')}`, `
+                ${chk('rpg-vit-angel', t('angel_set'))}
+                <div class="rpg-vit-note">${t('angel_hint')}</div>
+                ${num(t('angel_depth'), 'rpg-vit-angel-depth', 'min="2" max="30" step="1"')}`)}
         </div>
     </div>
 </div>`;
@@ -1884,7 +2168,10 @@ function setupUI() {
     });
     $('#rpg-vit-lang').val(settings.language || 'en').on('change', function () {
         settings.language = $(this).val(); saveSettings();
+        const here = $('.rpg-vit-settings').first();
+        const mark = $('<div class="rpg-vit-mark"></div>').insertBefore(here);   // rebuilt where it was, not at the end of the list
         $('.rpg-vit-settings').remove(); setupUI();
+        mark.replaceWith($('.rpg-vit-settings').detach());
         $('.rpg-vit-settings .inline-drawer-content').show();
         $('.rpg-vit-settings .inline-drawer-icon').removeClass('down').addClass('up');
         $('#rpg-vit-btn').attr('title', t('btn_title')); $('#rpg-vit-title').text(t('panel_title'));
@@ -1907,7 +2194,35 @@ function setupUI() {
         settings.angelDepth = Math.max(2, Math.min(30, parseInt(this.value, 10) || 6));
         this.value = settings.angelDepth; saveSettings();
     });
-    $('#rpg-vit-autodetect').prop('checked', !!settings.autoDetect).on('change', function () { settings.autoDetect = this.checked; saveSettings(); });
+    const intimLock = () => $('#rpg-vit-intimacy').prop('disabled', !settings.autoDetect).closest('.checkbox_label').toggleClass('rpg-vit-off', !settings.autoDetect);
+    $('#rpg-vit-autodetect').prop('checked', !!settings.autoDetect).on('change', function () { settings.autoDetect = this.checked; saveSettings(); intimLock(); });
+    $('#rpg-vit-intimacy').prop('checked', !!settings.intimacyEnabled).on('change', function () { settings.intimacyEnabled = this.checked; saveSettings(); });
+    intimLock();
+    // your body: the cycle only for a woman player, and the rolls written out
+    const femLock = () => {
+        $('.rpg-vit-fem').toggle(settings.playerSex === 'f');
+        const tr = settings.playerSex === 'f' ? playerTraits() : null;
+        $('#rpg-vit-prolls').text(tr ? t('p_rolls', { len: tr.len, per: tr.period, pain: t('pain' + (tr.pain || 0)), fert: t(tr.fertile ? 'p_fert_y' : 'p_fert_n'), r: tr.rolls ? tr.rolls.fert : '—' }) : '');
+        const ci = playerCycleInfo();
+        $('#rpg-vit-pday').val(ci && !ci.preg ? ci.cd : '').prop('disabled', !ci || ci.preg);
+        $('#rpg-vit-pend').toggle(!!(ci && ci.preg));
+    };
+    const bodyChanged = () => { saveSettings(); if (state) { syncCycleEffect(); _builtSig = null; renderPanel(); } femLock(); };
+    $('#rpg-vit-psex').val(settings.playerSex || '').on('change', function () { settings.playerSex = ['f', 'm', 'x'].includes(this.value) ? this.value : ''; bodyChanged(); });
+    $('#rpg-vit-pcycle').prop('checked', !!settings.playerCycle).on('change', function () { settings.playerCycle = this.checked; bodyChanged(); });
+    $('#rpg-vit-ppreg').prop('checked', !!settings.playerPregnancy).on('change', function () { settings.playerPregnancy = this.checked; bodyChanged(); });
+    $('#rpg-vit-phide').prop('checked', settings.playerHidePreg !== false).on('change', function () { settings.playerHidePreg = this.checked; bodyChanged(); });
+    $('#rpg-vit-pevery').val(settings.cycleDayEvery || 30).on('change', function () { settings.cycleDayEvery = Math.max(4, Math.min(200, parseInt(this.value, 10) || 30)); this.value = settings.cycleDayEvery; saveSettings(); });
+    $('#rpg-vit-pday').on('change', function () {
+        const c = cycleState(); const ci = playerCycleInfo();
+        if (!c || !ci || ci.preg) return;
+        c.start = c.day - (Math.max(1, Math.min(ci.len, parseInt(this.value, 10) || 1)) - 1);
+        saveState(); bodyChanged();
+    });
+    $('#rpg-vit-ppill').prop('checked', !!settings.playerPill).on('change', function () { settings.playerPill = this.checked; bodyChanged(); });
+    $('#rpg-vit-pend').on('click', () => { endPlayerPregnancy('manual'); bodyChanged(); });
+    $('#rpg-vit-preroll').on('click', () => { settings.playerTraits[personaKey()] = rollPlayerTraits(); bodyChanged(); });
+    femLock();
     $('#rpg-vit-combat-inject').prop('checked', settings.combatInject !== false).on('change', function () { settings.combatInject = this.checked; saveSettings(); buildInjection(); });
     $('#rpg-vit-combat-depth').val(typeof settings.combatDepth === 'number' ? settings.combatDepth : settings.injectDepth).on('change', function () { settings.combatDepth = Math.max(0, parseInt($(this).val()) || 0); saveSettings(); buildInjection(); });
     $('#rpg-vit-combat-auto').prop('checked', !!settings.combatAuto).on('change', function () { settings.combatAuto = this.checked; saveSettings(); });
@@ -1958,5 +2273,7 @@ window.RPG.vitals = {
     addFatigue: (n) => { syncChat(); if (state) addFatigue(n); },
     getLevel: () => { syncChat(); return state ? state.level : null; },
     addXp: (n) => { syncChat(); if (state) addXp(n); },
+    // the last intimate scene the story scan saw in this chat: { level: 'romantic'|'sex', with, messageId, at } or null
+    lastIntimacy: () => { syncChat(); return state && state.lastIntimacy ? Object.assign({}, state.lastIntimacy) : null; },
     refresh: () => { loadState(getContext().chatId); _builtSig = null; renderPanel(); buildInjection(); }
 };
