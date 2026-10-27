@@ -17,6 +17,7 @@ const defaultSettings = {
     starveDamage: 2,
     autoExpire: true,
     autoExpireMax: 20,
+    stackEffects: true,       // a second "Soreness" joins the first as ×2 instead of a new line
     levelEnabled: false,
     manaEnabled: false,
     fatigueEnabled: false,
@@ -104,6 +105,7 @@ const I18N = {
         toast_levelup: 'Level up! You are now level {n}.',
         inject_level: 'Level {n}', inject_mana: 'Mana: {m}/100', inject_fatigue: 'Fatigue: {f}/100 (higher = more tired)',
         set_level: 'Enable level (XP from defeated enemies + AI story milestones, max 100)',
+        set_stack: 'Similar effects stack (Soreness ×2) instead of a second line',
         set_autoexpire: 'Fade effects with no set duration', set_autoexpire_max: 'random up to (messages):',
         set_mana: 'Enable mana (the story raises and spends it)',
         set_fatigue: 'Enable fatigue (rises with exertion, falls with rest)',
@@ -175,6 +177,7 @@ const I18N = {
         toast_levelup: 'Новый уровень! Теперь ты {n} уровня.',
         inject_level: 'Уровень {n}', inject_mana: 'Мана: {m}/100', inject_fatigue: 'Усталость: {f}/100 (больше = сильнее устал)',
         set_level: 'Включить уровень (опыт с побеждённых врагов + вехи от ИИ, макс 100)',
+        set_stack: 'Похожие эффекты складываются (Ломота ×2), а не идут второй строкой',
         set_autoexpire: 'Гасить эффекты без заданной длительности', set_autoexpire_max: 'рандом до (сообщений):',
         set_mana: 'Включить ману (сюжет её тратит и восполняет)',
         set_fatigue: 'Включить усталость (растёт от нагрузки, падает при отдыхе)',
@@ -441,8 +444,33 @@ function setHp(n, max) {
     if (typeof n === 'number') state.hp = n;
     clampHp(); saveState(); renderPanel(); buildInjection();
 }
+/* Similar effects: the same name, or one name the start of the other ("Sore" / "Soreness"), of the same
+   kind. Effects tied to something (worn gear, the cycle) are never merged. */
+function effKey(x) { return String(x || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim(); }
+function similarEff(a, b) {
+    const x = effKey(a), y = effKey(b);
+    if (!x || !y) return false;
+    if (x === y) return true;
+    try { if (window.RPG && window.RPG.match && window.RPG.match.same && window.RPG.match.same(x, y)) return true; } catch (e) { /* no matcher */ }
+    const [s0, l0] = x.length <= y.length ? [x, y] : [y, x];
+    return s0.length >= 4 && l0.startsWith(s0);
+}
 function addBuff(b) {
     if (!b || !b.name) return null;
+    // a second one of the same: it stacks — ×N, the longer of the two durations, the newest description
+    if (settings.stackEffects && !b.tag && state && Array.isArray(state.buffs)) {
+        const kind = b.kind === 'debuff' ? 'debuff' : 'buff';
+        const hit = state.buffs.find(x => !x.tag && (x.kind === 'debuff' ? 'debuff' : 'buff') === kind && similarEff(x.name, b.name));
+        if (hit) {
+            hit.count = (hit.count || 1) + 1;
+            const nd = (typeof b.duration === 'number' && b.duration > 0) ? Math.round(b.duration) : null;
+            if (hit.duration != null) hit.duration = nd == null && !settings.autoExpire ? null : Math.max(hit.duration, nd == null ? hit.duration : nd);
+            if (b.effect) hit.effect = String(b.effect);
+            if (b.src === 'intimacy') hit.src = 'intimacy';
+            saveState(); renderPanel(); buildInjection();
+            return hit;
+        }
+    }
     let dur = (typeof b.duration === 'number' && b.duration > 0) ? Math.round(b.duration) : null;
     // No explicit duration → optionally fade after a random number of messages.
     // Tagged buffs (e.g. worn equipment) are "sticky" — they never auto-fade; they're removed explicitly.
@@ -1006,7 +1034,7 @@ Output strictly JSON: {${fields}}`;
             addBuff(e);
             (fromIntim ? intimNotes : notes).push((e.kind === 'debuff' ? '−' : '+') + escapeHtml(e.name));
         }
-        for (const nm of (Array.isArray(res.remove_effects) ? res.remove_effects : [])) { const b = state.buffs.find(x => x.name === nm); if (b) removeBuff(b.id); }
+        for (const nm of (Array.isArray(res.remove_effects) ? res.remove_effects : [])) { const b = state.buffs.find(x => x.name === nm) || (settings.stackEffects ? state.buffs.find(x => !x.tag && similarEff(x.name, nm)) : null); if (b) removeBuff(b.id); }
         if (notes.length) toastr.info(t('auto_changed') + ' ' + notes.join(', '));
         if (pregNow && (res.pregnancy_ended === true || res.pregnancy_ended === 'true')) endPlayerPregnancy();
         if (askIntimacy && (intim === 'romantic' || intim === 'sex')) {
@@ -1148,7 +1176,7 @@ function buildInjection() {
         const list = state.buffs.map(b => {
             const sign = b.kind === 'debuff' ? '−' : '+';
             const dur = b.duration == null ? '' : ` (${b.duration})`;
-            return `${sign}${b.name}${b.effect ? ': ' + b.effect : ''}${dur}`;
+            return `${sign}${b.name}${b.count > 1 ? ' ×' + b.count : ''}${b.effect ? ': ' + b.effect : ''}${dur}`;
         }).join('; ');
         parts.push(`${t('inject_effects')}: ${list}`);
         parts.push(t('inject_effects_note'));
@@ -1764,7 +1792,7 @@ function renderPanel() {
 function structSig() {
     if (!state) return 'none';
     const flat = (state.hp / (state.maxHp || 100)) <= 0;
-    const buffs = state.buffs.map(b => `${b.id}:${b.kind === 'debuff' ? 'd' : 'b'}:${b.duration == null ? 'x' : 'n'}:${b.effect ? 'e' : ''}`).join(',');
+    const buffs = state.buffs.map(b => `${b.id}:${b.kind === 'debuff' ? 'd' : 'b'}:${b.duration == null ? 'x' : 'n'}:${b.effect ? 'e' : ''}:${b.count || 1}:${b.effect || ''}`).join(',');
     const enemies = state.enemies.map(e => `${e.id}:${e.hp}/${e.max}`).join(',');   // grouped rows aggregate hp — any change rebuilds
     return [
         settings.language, !!settings.gmControls, !!settings.hungerEnabled, !!settings.manaEnabled,
@@ -1910,14 +1938,15 @@ function buildPanel() {
     } else {
         slots = state.buffs.map(b => {
             const deb = b.kind === 'debuff';
-            return `<div class="vex-s filled ${deb ? 'debuff' : ''}${b.src === 'intimacy' ? ' intim' : ''}" data-bid="${b.id}" title="${escapeHtml(b.name + (b.effect ? ' — ' + b.effect : ''))}">
+            return `<div class="vex-s filled ${deb ? 'debuff' : ''}${b.src === 'intimacy' ? ' intim' : ''}" data-bid="${b.id}" title="${escapeHtml(b.name + (b.count > 1 ? ' ×' + b.count : '') + (b.effect ? ' — ' + b.effect : ''))}">
                 ${deb ? DOWN : UP}
+                ${b.count > 1 ? `<span class="vex-stack">×${b.count}</span>` : ''}
                 ${b.duration == null ? '' : `<span class="vex-dur">${b.duration}</span>`}
                 ${gm ? `<span class="vex-b-del rpg-vit-b-del" data-id="${b.id}">✕</span>` : ''}
             </div>`;
         }).join('');
         efflist = `<div class="vex-efflist">` + state.buffs.map(b => `<div class="vex-efl ${b.kind === 'debuff' ? 'debuff' : ''}${b.src === 'intimacy' ? ' intim' : ''}" data-bid="${b.id}">
-            <span class="vex-efl-n">${b.src === 'intimacy' ? '<i class="fa-solid fa-heart vex-love" aria-hidden="true"></i>' : ''}${escapeHtml(b.name)}</span>
+            <span class="vex-efl-n">${b.src === 'intimacy' ? '<i class="fa-solid fa-heart vex-love" aria-hidden="true"></i>' : ''}${escapeHtml(b.name)}${b.count > 1 ? ` <b class="vex-efl-x">×${b.count}</b>` : ''}</span>
             <span class="vex-efl-e">${b.effect ? escapeHtml(b.effect) : ''}</span>
             <span class="vex-efl-d">${b.duration == null ? escapeHtml(t('forever')) : b.duration}</span>
         </div>`).join('') + `</div>`;
@@ -2108,6 +2137,7 @@ function settingsHtml() {
             ${sub(`❤️ ${t('sec_health')}`, `
                 ${num(t('set_maxhp'), 'rpg-vit-maxhp', 'min="1"')}
                 ${num(t('set_depth'), 'rpg-vit-depth', 'min="0"')}
+                ${chk('rpg-vit-stack', t('set_stack'))}
                 ${chk('rpg-vit-autoexpire', t('set_autoexpire'))}
                 <div class="rpg-vit-in">${num(t('set_autoexpire_max'), 'rpg-vit-autoexpire-max', 'min="1" max="200"')}</div>
                 ${chk('rpg-vit-gm', t('set_gm'))}`)}
@@ -2183,6 +2213,7 @@ function setupUI() {
     $('#rpg-vit-hunger-every').val(settings.hungerDrainEvery).on('change', function () { settings.hungerDrainEvery = Math.max(1, parseInt($(this).val()) || 3); saveSettings(); });
     $('#rpg-vit-hunger-amt').val(settings.hungerDrainAmount).on('change', function () { settings.hungerDrainAmount = Math.max(1, parseInt($(this).val()) || 5); saveSettings(); });
     $('#rpg-vit-starve-dmg').val(settings.starveDamage).on('change', function () { settings.starveDamage = Math.max(0, parseInt($(this).val()) || 0); saveSettings(); });
+    $('#rpg-vit-stack').prop('checked', settings.stackEffects !== false).on('change', function () { settings.stackEffects = this.checked; saveSettings(); });
     $('#rpg-vit-autoexpire').prop('checked', !!settings.autoExpire).on('change', function () { settings.autoExpire = this.checked; saveSettings(); });
     $('#rpg-vit-autoexpire-max').val(settings.autoExpireMax).on('change', function () { settings.autoExpireMax = Math.max(1, parseInt($(this).val()) || 20); saveSettings(); });
     $('#rpg-vit-gm').prop('checked', !!settings.gmControls).on('change', function () { settings.gmControls = this.checked; saveSettings(); renderPanel(); });

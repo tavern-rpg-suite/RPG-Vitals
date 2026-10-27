@@ -166,6 +166,10 @@
 #rpg-vit-body .vex-s.filled.debuff { border-color:var(--oxblood-deep); background:radial-gradient(circle at 38% 32%,#b8463b,var(--oxblood-deep)); }
 #rpg-vit-body .vex-s .vex-dur { position:absolute; bottom:-4px; right:-4px; min-width:14px; height:14px; padding:0 3px; border-radius:7px;
     background:#f7edd2; border:1px solid var(--edge); color:var(--ink-soft); font-family:"PT Mono",monospace; font-size:8px; line-height:13px; text-align:center; }
+/* a stacked effect: ×N at the top left of the circle, and after the name in the list */
+#rpg-vit-body .vex-s .vex-stack { position:absolute; top:-5px; left:-6px; min-width:15px; height:14px; padding:0 3px; border-radius:7px;
+    background:var(--ink, #2a2118); color:#f7edd2; font-family:"PT Mono",monospace; font-size:8px; font-weight:700; line-height:14px; text-align:center; box-shadow:0 1px 2px rgba(0,0,0,.3); }
+#rpg-vit-body .vex-efl-x { font-family:"PT Mono",monospace; font-size:11px; font-weight:700; color:var(--oxblood); margin-left:3px; }
 #rpg-vit-body .vex-s .vex-b-del { position:absolute; top:-5px; right:-5px; width:14px; height:14px; border-radius:50%; background:var(--oxblood);
     color:#f4e4c0; font-size:9px; line-height:14px; text-align:center; cursor:pointer; opacity:0; transition:.15s; }
 #rpg-vit-body .vex-s:hover .vex-b-del { opacity:1; }
