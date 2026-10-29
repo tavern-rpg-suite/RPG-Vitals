@@ -1843,13 +1843,13 @@ function paintPanel() {
     }
     for (const b of state.buffs) {
         if (b.duration != null) {
-            const d = body.querySelector(`.vex-s[data-bid="${b.id}"] .vex-dur`); if (d) d.textContent = b.duration;
+            const d = body.querySelector(`.vex-s[data-bid="${escapeHtml(b.id)}"] .vex-dur`); if (d) d.textContent = b.duration;
         }
-        const efd = body.querySelector(`.vex-efl[data-bid="${b.id}"] .vex-efl-d`);
+        const efd = body.querySelector(`.vex-efl[data-bid="${escapeHtml(b.id)}"] .vex-efl-d`);
         if (efd) efd.textContent = (b.duration == null ? t('forever') : b.duration);
     }
     for (const e of state.enemies) {
-        const row = body.querySelector(`.vex-enemy[data-eid="${e.id}"]`); if (!row) continue;
+        const row = body.querySelector(`.vex-enemy[data-eid="${escapeHtml(e.id)}"]`); if (!row) continue;
         const num = row.querySelector('.js-e-hp');
         if (num) num.textContent = `${e.hp}/${e.max}${e.atk ? ` · ${t('enemy_atk_ph')} ${e.atk}` : ''}`;
         const bar = row.querySelector('.rpg-vit-bar');
@@ -1938,14 +1938,14 @@ function buildPanel() {
     } else {
         slots = state.buffs.map(b => {
             const deb = b.kind === 'debuff';
-            return `<div class="vex-s filled ${deb ? 'debuff' : ''}${b.src === 'intimacy' ? ' intim' : ''}" data-bid="${b.id}" title="${escapeHtml(b.name + (b.count > 1 ? ' ×' + b.count : '') + (b.effect ? ' — ' + b.effect : ''))}">
+            return `<div class="vex-s filled ${deb ? 'debuff' : ''}${b.src === 'intimacy' ? ' intim' : ''}" data-bid="${escapeHtml(b.id)}" title="${escapeHtml(b.name + (b.count > 1 ? ' ×' + b.count : '') + (b.effect ? ' — ' + b.effect : ''))}">
                 ${deb ? DOWN : UP}
                 ${b.count > 1 ? `<span class="vex-stack">×${b.count}</span>` : ''}
                 ${b.duration == null ? '' : `<span class="vex-dur">${b.duration}</span>`}
-                ${gm ? `<span class="vex-b-del rpg-vit-b-del" data-id="${b.id}">✕</span>` : ''}
+                ${gm ? `<span class="vex-b-del rpg-vit-b-del" data-id="${escapeHtml(b.id)}">✕</span>` : ''}
             </div>`;
         }).join('');
-        efflist = `<div class="vex-efflist">` + state.buffs.map(b => `<div class="vex-efl ${b.kind === 'debuff' ? 'debuff' : ''}${b.src === 'intimacy' ? ' intim' : ''}" data-bid="${b.id}">
+        efflist = `<div class="vex-efflist">` + state.buffs.map(b => `<div class="vex-efl ${b.kind === 'debuff' ? 'debuff' : ''}${b.src === 'intimacy' ? ' intim' : ''}" data-bid="${escapeHtml(b.id)}">
             <span class="vex-efl-n">${b.src === 'intimacy' ? '<i class="fa-solid fa-heart vex-love" aria-hidden="true"></i>' : ''}${escapeHtml(b.name)}${b.count > 1 ? ` <b class="vex-efl-x">×${b.count}</b>` : ''}</span>
             <span class="vex-efl-e">${b.effect ? escapeHtml(b.effect) : ''}</span>
             <span class="vex-efl-d">${b.duration == null ? escapeHtml(t('forever')) : b.duration}</span>
@@ -1982,12 +1982,12 @@ function buildPanel() {
     const combatBlock = (gm || state.enemies.length) ? `<div class="vex-section">${escapeHtml(t('combat'))}</div>
         ${state.enemies.length ? groupedEnemies().map(g => {
             const epct = Math.max(0, Math.min(100, Math.round(g.hp / (g.max || 1) * 100)));
-            return `<div class="vex-enemy" data-eid="${g.repId}">
-                <div class="rpg-vit-hp-top"><span class="rpg-vit-b-name">${escapeHtml(g.label)}</span><span class="rpg-vit-hp-num"><span class="js-e-hp">${g.hp}/${g.max}${g.atk ? ` · ${escapeHtml(t('enemy_atk_ph'))} ${g.atk}` : ''}</span> <i class="fa-solid fa-xmark rpg-vit-e-del" data-id="${g.repId}" title="${escapeHtml(t('remove'))}" style="cursor:pointer;color:var(--sepia);margin-left:6px;"></i></span></div>
+            return `<div class="vex-enemy" data-eid="${escapeHtml(g.repId)}">
+                <div class="rpg-vit-hp-top"><span class="rpg-vit-b-name">${escapeHtml(g.label)}</span><span class="rpg-vit-hp-num"><span class="js-e-hp">${g.hp}/${g.max}${g.atk ? ` · ${escapeHtml(t('enemy_atk_ph'))} ${g.atk}` : ''}</span> <i class="fa-solid fa-xmark rpg-vit-e-del" data-id="${escapeHtml(g.repId)}" title="${escapeHtml(t('remove'))}" style="cursor:pointer;color:var(--sepia);margin-left:6px;"></i></span></div>
                 <div class="rpg-vit-bar-wrap"><div class="rpg-vit-bar" style="width:${epct}%; background:#b0432f;"></div></div>
                 ${gm ? `<div class="vex-ctrl">
-                    <button class="rpg-vit-btn ok rpg-vit-atk" data-id="${g.repId}"><i class="fa-solid fa-gavel"></i> ${escapeHtml(t('attack'))}</button>
-                    <button class="rpg-vit-btn danger rpg-vit-ehit" data-id="${g.repId}"><i class="fa-solid fa-burst"></i> ${escapeHtml(t('enemy_hit'))}</button>
+                    <button class="rpg-vit-btn ok rpg-vit-atk" data-id="${escapeHtml(g.repId)}"><i class="fa-solid fa-gavel"></i> ${escapeHtml(t('attack'))}</button>
+                    <button class="rpg-vit-btn danger rpg-vit-ehit" data-id="${escapeHtml(g.repId)}"><i class="fa-solid fa-burst"></i> ${escapeHtml(t('enemy_hit'))}</button>
                 </div>` : ''}
             </div>`;
         }).join('') : `<div class="vex-eff-note">${escapeHtml(t('no_enemies'))}</div>`}
