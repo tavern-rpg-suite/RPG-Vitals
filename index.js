@@ -10,6 +10,7 @@ const defaultSettings = {
     enabled: false,
     language: 'en',
     injectDepth: 1,
+    inChat: false,         // off: the blocks go to the top of the prompt, as always; on: into the chat at the depths below (a local model then re-reads only the end)
     defaultMaxHp: 100,
     hungerEnabled: false,
     hungerDrainEvery: 3,
@@ -48,8 +49,12 @@ const defaultSettings = {
 
 let settings = {};
 let state = null;
-let vitalsBusy = false; // re-entrancy lock so auto-analyses can't stack/loop (prevents freezes after eating)
+let vitalsBusy = false; // false, or the turnEpoch of the analysis in flight — re-entrancy lock so auto-analyses can't stack/loop (prevents freezes after eating)
 let _builtSig = null;   // signature of the last full panel build — lets stat updates repaint in place (no flicker)
+let turnEpoch = 0;          // bumped whenever the state is rewound; analyses of an older variant then drop their result
+let turnInFlight = null;    // { id, key } of the variant being analysed now
+let turnMsgRef = null;
+let turnPending = false;    // a swipe asked for a new variant; if the generation stops, the old one's result comes back      // the chat message state.turn belongs to (by object, so deleting an EARLIER message is told apart)
 
 function genId() { return Math.random().toString(36).substr(2, 9); }
 function escapeHtml(x) {
@@ -78,7 +83,7 @@ const I18N = {
         set_combat_auto: 'Let the AI scan the chat for combat (off = narrative only)', set_combat_scan: 'Recent messages to scan for combat (1–10):',
         combat_changed: 'Combat:', c_appears: '{name} appears', c_hit: '{name} −{n}', c_down: '{name} down', c_fled: '{name} fled',
         set_title: 'RPG Vitals (HP & Effects)', set_enable: 'Enable Vitals',
-        set_lang: 'Language:', set_depth: 'Context injection depth:', set_maxhp: 'Default max HP:',
+        set_lang: 'Language:', set_depth: 'Context injection depth:', set_inchat: 'Insert in chat', set_depth_off: 'Works with "Insert in chat"', set_maxhp: 'Default max HP:',
         hunger: 'Hunger', feed: 'Feed', set_hungerlbl: 'Set',
         inject_hunger: 'Hunger: {h}/100', inject_starving: "{{user}} is starving (hunger 0) — weak, shaky and desperate for food; play this hunger out now",
         angel_depth: 'Messages the angel reads:',
@@ -150,7 +155,7 @@ const I18N = {
         set_combat_auto: 'Разрешить ИИ сканировать чат на бой (выкл = только нарратив)', set_combat_scan: 'Сколько последних сообщений сканировать (1–10):',
         combat_changed: 'Бой:', c_appears: 'появился «{name}»', c_hit: '«{name}» −{n}', c_down: '«{name}» повержен', c_fled: '«{name}» сбежал',
         set_title: 'RPG Vitals (HP и эффекты)', set_enable: 'Включить состояние',
-        set_lang: 'Язык:', set_depth: 'Глубина вставки в контекст:', set_maxhp: 'Макс. HP по умолчанию:',
+        set_lang: 'Язык:', set_depth: 'Глубина вставки в контекст:', set_inchat: 'Вставлять в чат', set_depth_off: 'Работает с «Вставлять в чат»', set_maxhp: 'Макс. HP по умолчанию:',
         hunger: 'Сытость', feed: 'Покормить', set_hungerlbl: 'Задать',
         inject_hunger: 'Сытость: {h}/100', inject_starving: '{{user}} голодает (сытость 0) — слаб(а), дрожит и отчаянно ищет еду; обязательно отыграй этот голод сейчас',
         angel_depth: 'Сколько сообщений читает ангел:',
@@ -316,6 +321,7 @@ function loadState(explicitId) {
     const chatId = explicitId || pendingChatId || getContext().chatId;
     if (!chatId) { currentChatId = null; pendingChatId = null; stateReady = false; state = freshState(); return; }
     currentChatId = chatId; pendingChatId = null; stateReady = true;
+    turnMsgRef = null; turnInFlight = null;
     if (!settings.chatStamps) settings.chatStamps = {};
     settings.chatStamps[chatId] = Date.now();   // touch: keeps this chat's state from being pruned
 
@@ -342,6 +348,7 @@ function loadState(explicitId) {
         settings.chatStates[chatId] = state;
         if (restored) { saveSettings(); toastr.success(t('toast_restored')); }
     }
+    if (state.turn) { const m = (getContext().chat || [])[state.turn.id]; turnMsgRef = m && !m.is_user && !m.is_system ? m : null; }
 }
 
 function saveState() {
@@ -359,7 +366,7 @@ function saveState() {
         if (chat && chat.length > 0) {
             const lastMsg = chat[chat.length - 1];
             if (!lastMsg.extra) lastMsg.extra = {};
-            lastMsg.extra.rpg_vitals_checkpoint = cloneState(state);
+            lastMsg.extra.rpg_vitals_checkpoint = bareState(state);
             saveChatDebounced();
         }
     } catch (e) { console.error('[Vitals] checkpoint save failed:', e); }
@@ -901,8 +908,8 @@ async function analyzeMessage(messageId, opts) {
         const eats = settings.hungerEnabled && mentionsEating(msg.mes);
         const cares = mentionsCare(msg.mes);
         if (!eats && !cares) return;
-        if (vitalsBusy) return; // never stack analyses — this is what caused freezes after eating
-        vitalsBusy = true;
+        if (vitalsBusy !== false && vitalsBusy === turnEpoch) return; // never stack analyses — this is what caused freezes after eating
+        const myEpoch = turnEpoch; vitalsBusy = myEpoch;
         try {
             const whoS = getContext().name1 || 'the player';
             const askSat = settings.hungerEnabled ? `\n"satiety_delta": satiety GAINED by eating/drinking THIS message — POSITIVE 0..40 (snack ~10, meal ~30, drink ~5-15), else 0.` : '';
@@ -913,7 +920,7 @@ async function analyzeMessage(messageId, opts) {
 Optionally "add_effects": one short effect if clearly granted (e.g. "Bandaged", "Rested"), else empty.
 Write effect names in ${genLang()}. Output strictly JSON: {"hp_delta":0${settings.hungerEnabled ? ',"satiety_delta":0' : ''}${settings.manaEnabled ? ',"mana_delta":0' : ''}${settings.fatigueEnabled ? ',"fatigue_delta":0' : ''},"add_effects":[]}`;
             const resS = await callAI(sysS, String(msg.mes).slice(0, 1500));
-            if (!ownsChat(myChat)) return;   // chat changed during the request
+            if (!ownsChat(myChat) || myEpoch !== turnEpoch) return;   // chat changed, or the turn was swiped, during the request
             if (!resS) return;
             const notesS = [];
             const hd = parseInt(resS.hp_delta);
@@ -926,11 +933,11 @@ Write effect names in ${genLang()}. Output strictly JSON: {"hp_delta":0${setting
             if (settings.fatigueEnabled && fd < 0) { addFatigue(fd); notesS.push(`${t('lbl_fatigue')} ${fd}`); }
             for (const e of (Array.isArray(resS.add_effects) ? resS.add_effects : [])) if (e && e.name) { addBuff(e); notesS.push('+' + escapeHtml(e.name)); }
             if (notesS.length) toastr.info(t('auto_changed') + ' ' + notesS.join(', '));
-        } catch (e) { /* silent */ } finally { vitalsBusy = false; }
+        } catch (e) { /* silent */ } finally { if (vitalsBusy === myEpoch) vitalsBusy = false; }
         return;
     }
-    if (vitalsBusy) return; // don't run the story scan while another analysis is in flight
-    vitalsBusy = true;
+    if (vitalsBusy !== false && vitalsBusy === turnEpoch) return; // don't run the story scan while another analysis is in flight
+    const myEpoch = turnEpoch; vitalsBusy = myEpoch;
     try {
         const effList = state.buffs.map(b => b.name).join(', ') || 'none';
         const hungerInfo = settings.hungerEnabled ? `, hunger ${state.hunger}/100` : '';
@@ -989,7 +996,7 @@ Current HP ${state.hp}/${state.maxHp}${hungerInfo}${manaInfo}${fatigueInfo}${lvl
 Write any effect names/descriptions in ${genLang()}.
 Output strictly JSON: {${fields}}`;
         const res = await callAI(sys, String(msg.mes).slice(0, 2000));
-        if (!ownsChat(myChat)) return;   // chat changed during the request
+        if (!ownsChat(myChat) || myEpoch !== turnEpoch) return;   // chat changed, or the turn was swiped, during the request
         if (!res) return;
         const notes = [];
         if (typeof res.hp_delta === 'number' && res.hp_delta !== 0) {
@@ -1010,7 +1017,7 @@ Output strictly JSON: {${fields}}`;
                "something wrong happens". */
             if (hpd < 0 && others.length) {
                 const verdict = await whoseHurt(msg.mes, who, others);
-                if (!ownsChat(myChat)) return;
+                if (!ownsChat(myChat) || myEpoch !== turnEpoch) return;
                 if (verdict === 'other') {
                     console.log('[RPG Vitals] damage ignored: it belonged to ' + others.join('/'));
                     hpd = 0;
@@ -1045,11 +1052,12 @@ Output strictly JSON: {${fields}}`;
             state.lastIntimacy = detail; saveState();
             try { window.dispatchEvent(new CustomEvent('rpg:intimacy', { detail })); } catch (e) { /* nobody listening */ }
         }
-    } catch (e) { /* silent: don't disrupt chat on API errors */ } finally { vitalsBusy = false; }
+    } catch (e) { /* silent: don't disrupt chat on API errors */ } finally { if (vitalsBusy === myEpoch) vitalsBusy = false; }
 }
 async function analyzeCombat(messageId) {
     if (!settings.enabled || !settings.combatAuto || !apiKey() || !state) return 0;
     const myChat = currentChatId;
+    const myEpoch = turnEpoch;
     const ctx = getContext();
     const msg = ctx.chat[messageId];
     if (!msg || msg.is_user || msg.is_system || !msg.mes) return 0;
@@ -1077,7 +1085,7 @@ Rules — everything below is about "${who}" the player, NOT any other character
 Write enemy names in ${genLang()}.
 Output strictly JSON: {"new_enemies":[{"name":"","hp":20,"atk":8}],"hits_on_enemies":[{"name":"","dmg":0}],"damage_to_player":0,"fled":[]}`;
         const res = await callAI(sys, recent);
-        if (!ownsChat(myChat)) return 0;   // chat changed during the request
+        if (!ownsChat(myChat) || myEpoch !== turnEpoch) return 0;   // chat changed, or the turn was swiped, during the request
         if (!res) return 0;
         const notes = [];
         for (const e of (Array.isArray(res.new_enemies) ? res.new_enemies : [])) {
@@ -1140,21 +1148,150 @@ function tickBuffs(messageId) {
 }
 
 // A bot turn's consequences (buff ticks, hunger drain, AI HP/effect/combat analysis) must apply
-// EXACTLY ONCE per message. Swiping or regenerating re-fires MESSAGE_RECEIVED for the same message,
-// which previously stacked every change again. A per-message marker makes it idempotent.
+// EXACTLY ONCE — and for the variant that is on screen. Swiping, regenerating or continuing the last
+// reply re-fires MESSAGE_RECEIVED for the same message. The state from just before that reply is kept
+// (state.turn), so a new variant starts from it instead of stacking on the old variant's changes, and
+// each variant's result is kept in its own swipe (message.extra is per swipe in SillyTavern), so
+// swiping back to a variant shows its result again without a new request.
+function bareState(s) { const c = cloneState(s); delete c.turn; return c; }
+function mesKey(msg) {
+    const m = String(msg && msg.mes || '');
+    let h = 0; for (let i = 0; i < m.length; i++) h = (h * 31 + m.charCodeAt(i)) | 0;
+    return `${typeof msg.swipe_id === 'number' ? msg.swipe_id : 0}:${m.length}:${h}`;
+}
+// What changed from `from` to `to`, laid over `cur`: a swipe moves only what the reply changed, and
+// keeps what was done by hand meanwhile (a potion drunk, an effect removed, an edit in GM mode).
+// Numbers move by the difference; lists of things with an id gain and lose those things; the rest takes `to`.
+function rebase(cur, from, to) {
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const copy = x => (x && typeof x === 'object') ? JSON.parse(JSON.stringify(x)) : x;
+    if (same(from, to)) return cur;
+    if (typeof cur === 'number' && typeof from === 'number' && typeof to === 'number') return cur + (to - from);
+    const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
+    const idOf = x => isObj(x) ? (x.id != null ? 'i:' + x.id : (x.name != null ? 'n:' + x.name : null)) : null;
+    if (Array.isArray(cur) && Array.isArray(from) && Array.isArray(to) && [...from, ...to].every(x => idOf(x) != null)) {
+        const F = new Map(from.map(x => [idOf(x), x])), T = new Map(to.map(x => [idOf(x), x]));
+        let out = cur.filter(x => { const k = idOf(x); return !(k != null && F.has(k) && !T.has(k)); });
+        out = out.map(x => { const k = idOf(x); return (k != null && F.has(k) && T.has(k)) ? rebase(x, F.get(k), T.get(k)) : x; });
+        for (const [k, x] of T) if (!F.has(k) && !out.some(y => idOf(y) === k)) out.push(copy(x));
+        return out;
+    }
+    if (isObj(cur) && isObj(from) && isObj(to)) {
+        if (cur.id != null && from.id != null && cur.id !== from.id) return cur;   // a different thing there now: not the reply's to change
+        const out = { ...cur };
+        for (const k of new Set([...Object.keys(from), ...Object.keys(to)])) {
+            if (!(k in to)) { delete out[k]; continue; }
+            if (!(k in from) || !(k in cur)) { if (!(k in from) || !same(from[k], to[k])) out[k] = copy(to[k]); continue; }
+            if (!same(from[k], to[k])) out[k] = rebase(cur[k], from[k], to[k]);
+        }
+        return out;
+    }
+    return copy(to);
+}
+function clampVitals(s) {
+    const c = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
+    s.maxHp = Math.max(1, Number(s.maxHp) || 1);
+    s.hp = c(s.hp, 0, s.maxHp); s.hunger = c(s.hunger, 0, 100); s.mana = c(s.mana, 0, 100); s.fatigue = c(s.fatigue, 0, 100);
+    s.xp = Math.max(0, Number(s.xp) || 0); s.level = Math.max(1, Number(s.level) || 1);
+    s.buffs = (s.buffs || []).filter(b => b && (b.duration == null || b.duration > 0));
+    s.buffs.forEach(b => { if (b.count != null && b.count < 1) b.count = 1; });
+    s.enemies = (s.enemies || []).filter(e => e && e.hp > 0);
+    return s;
+}
+// move the state from the variant now counted to `target` (the state before the reply, or another variant's result)
+function moveTo(target) {
+    const turn = state.turn;
+    const from = turn && turn.applied ? turn.applied : bareState(state);
+    state = clampVitals(normalizeState(rebase(bareState(state), from, cloneState(target))));
+    if (turn) { turn.applied = cloneState(target); state.turn = turn; }
+    if (currentChatId) settings.chatStates[currentChatId] = state;
+    turnEpoch++;
+    saveState(); _builtSig = null; renderPanel(); buildInjection();
+}
+function dropKept(msg) {
+    if (msg.extra) delete msg.extra.rpg_vitals_after;
+    if (Array.isArray(msg.swipe_info)) msg.swipe_info.forEach(si => { if (si && si.extra) delete si.extra.rpg_vitals_after; });
+}
+function keepVariantResult(id, key) {
+    const msg = getContext().chat[id];
+    if (!msg || !state || !state.turn || state.turn.id !== id || mesKey(msg) !== key) return;
+    const after = { key, state: bareState(state) };
+    state.turn.applied = cloneState(after.state);
+    if (!msg.extra) msg.extra = {};
+    msg.extra.rpg_vitals_after = after;
+    const si = Array.isArray(msg.swipe_info) ? msg.swipe_info[msg.swipe_id] : null;
+    if (si && typeof si === 'object') { if (!si.extra) si.extra = {}; si.extra.rpg_vitals_after = cloneState(after); }
+    saveState();
+}
 function onBotMessage(id) {
     syncChat();   // tick/analyze against the chat the message actually belongs to
     const msg = getContext().chat[id];
-    if (!msg || msg.is_user || msg.is_system) return;
-    if (msg.rpg_vitals_done === true) return; // already handled — this fire is a swipe / regen
-    msg.rpg_vitals_done = true;               // mark up-front so re-entrant fires are ignored too
+    if (!msg || msg.is_user || msg.is_system || !state) return;
+    const key = mesKey(msg);
+    if (turnInFlight && turnInFlight.id === id && turnInFlight.key === key) return;   // a re-entrant fire of the same variant
+    const kept = msg.extra && msg.extra.rpg_vitals_after;
+    turnPending = false;
+    if (state.turn && state.turn.id === id) {
+        if (kept && kept.key === key) return;                 // this variant was already counted
+        moveTo(state.turn.before);                          // a new variant / regeneration / continuation: start from before the reply
+    } else {
+        if (msg.rpg_vitals_done === true || (kept && kept.key === key)) return;   // an older reply, already counted
+        // the previous reply can no longer be swiped: its kept results go from the chat file
+        if (turnMsgRef && turnMsgRef !== msg) dropKept(turnMsgRef);
+        state.turn = { id, before: bareState(state), applied: null };
+        turnMsgRef = msg;
+    }
+    msg.rpg_vitals_done = true;
+    turnInFlight = { id, key };
+    const ep = turnEpoch;
     tickBuffs(id);
     try { cycleTick(); } catch (e) { console.warn('[RPG Vitals] cycle', e); }
     try { syncBabyEffect(); } catch (e) { console.warn('[RPG Vitals] baby', e); }
+    if (state.turn) state.turn.applied = bareState(state);   // the ticks are this variant's; the readings add to it when kept
     // combat first: the narrative scan then only skips damage that combat ALREADY took.
     // Previously combatAuto discarded ALL narrative damage — a story wound outside a
     // tracked fight (a trap, a fall, an ambush) left HP untouched ("wounded at HP 99").
-    analyzeCombat(id).then(dmg => analyzeMessage(id, { combatDmg: dmg || 0 })).catch(() => analyzeMessage(id));
+    analyzeCombat(id).then(dmg => analyzeMessage(id, { combatDmg: dmg || 0 })).catch(() => analyzeMessage(id))
+        .finally(() => {
+            if (turnInFlight && turnInFlight.id === id && turnInFlight.key === key) turnInFlight = null;
+            if (ep === turnEpoch) keepVariantResult(id, key);
+        });
+}
+// Swiping the last reply. To a variant already counted: show its result. To a new one (it is about to
+// be generated): rewind to before the reply, so the generation sees the state the reply started from.
+function onSwiped(id) {
+    syncChat();
+    const msg = getContext().chat[id];
+    if (!msg || msg.is_user || msg.is_system || !state || !state.turn || state.turn.id !== id) return;
+    turnInFlight = null;
+    const kept = msg.extra && msg.extra.rpg_vitals_after;
+    const generating = !Array.isArray(msg.swipes) || msg.swipe_id >= msg.swipes.length;
+    if (!generating && kept && kept.key === mesKey(msg) && kept.state) { moveTo(kept.state); return; }
+    moveTo(state.turn.before);
+    turnPending = generating;
+    if (!generating) onBotMessage(id);   // an older variant with no kept result: count it now
+}
+// A generation stopped or failed after the swipe: the variant on screen is an old one, its result comes back.
+function onGenerationDone() {
+    if (!turnPending) return;
+    turnPending = false;
+    if (!state || !state.turn) return;
+    const msg = getContext().chat[state.turn.id];
+    const kept = msg && msg.extra && msg.extra.rpg_vitals_after;
+    if (msg && msg === turnMsgRef && kept && kept.state && kept.key === mesKey(msg)) moveTo(kept.state);
+}
+// The last reply deleted (or removed by "Regenerate"): its consequences go with it.
+function onDeleted(len) {
+    if (!state || !state.turn || !ownsChat(currentChatId)) return;
+    const chat = getContext().chat || [];
+    const at = turnMsgRef ? chat.indexOf(turnMsgRef) : -1;
+    if (at >= 0) { state.turn.id = at; saveState(); return; }   // an earlier message went: the reply only moved up
+    if (!turnMsgRef && !(typeof len === 'number' && len <= state.turn.id)) return;   // can't tell which went: keep it
+    {
+        moveTo(state.turn.before);
+        delete state.turn; turnInFlight = null; turnMsgRef = null;
+        saveState();
+    }
 }
 function onUserMessage(id) {
     syncChat();
@@ -1164,11 +1301,13 @@ function onUserMessage(id) {
     analyzeMessage(id, { selfReport: true });
 }
 
+// where the blocks go: the top of the prompt (as always), or the chat at their depths
+function injPos() { return settings.inChat ? 1 : 2; }
 function buildInjection() {
     if (!settings.enabled || !state || settings.injectDepth < 0) {
-        setExtensionPrompt(PROMPT_KEY, '', 2, 0, false, extension_prompt_roles.SYSTEM);
-        setExtensionPrompt(PROMPT_KEY_STARVE, '', 2, 0, false, extension_prompt_roles.SYSTEM);
-        setExtensionPrompt(PROMPT_KEY_COMBAT, '', 2, 0, false, extension_prompt_roles.SYSTEM); return;
+        setExtensionPrompt(PROMPT_KEY, '', injPos(), 0, false, extension_prompt_roles.SYSTEM);
+        setExtensionPrompt(PROMPT_KEY_STARVE, '', injPos(), 0, false, extension_prompt_roles.SYSTEM);
+        setExtensionPrompt(PROMPT_KEY_COMBAT, '', injPos(), 0, false, extension_prompt_roles.SYSTEM); return;
     }
     let parts = [t('inject_hp', { hp: state.hp, max: state.maxHp })];
     if (settings.levelEnabled) parts.push(t('inject_level', { n: state.level }));
@@ -1184,10 +1323,10 @@ function buildInjection() {
     if (settings.hungerEnabled && typeof state.hunger === 'number') parts.push(t('inject_hunger', { h: state.hunger }));
     if (settings.manaEnabled && typeof state.mana === 'number') parts.push(t('inject_mana', { m: state.mana }));
     if (settings.fatigueEnabled && typeof state.fatigue === 'number') parts.push(t('inject_fatigue', { f: state.fatigue }));
-    setExtensionPrompt(PROMPT_KEY, `\n[${parts.join('. ')}.]\n`, 2, settings.injectDepth, false, extension_prompt_roles.SYSTEM);
+    setExtensionPrompt(PROMPT_KEY, `\n[${parts.join('. ')}.]\n`, injPos(), settings.injectDepth, false, extension_prompt_roles.SYSTEM);
     // starving — emphatic note at the very END (depth 0), right before the reply
     const starving = settings.hungerEnabled && state.hunger === 0;
-    setExtensionPrompt(PROMPT_KEY_STARVE, starving ? `\n[${t('inject_starving')}.]\n` : '', 2, 0, false, extension_prompt_roles.SYSTEM);
+    setExtensionPrompt(PROMPT_KEY_STARVE, starving ? `\n[${t('inject_starving')}.]\n` : '', injPos(), 0, false, extension_prompt_roles.SYSTEM);
 
     // combat — only when there are enemies, and only if the user opted in
     let combatText = '';
@@ -1204,9 +1343,9 @@ function buildInjection() {
         } catch (e) { /* equipment optional */ }
         const d = (typeof settings.combatDepth === 'number') ? settings.combatDepth : settings.injectDepth;
         combatText = `\n[${t('inject_combat', { list, weapon })}.]\n`;
-        setExtensionPrompt(PROMPT_KEY_COMBAT, combatText, 2, Math.max(0, d), false, extension_prompt_roles.SYSTEM);
+        setExtensionPrompt(PROMPT_KEY_COMBAT, combatText, injPos(), Math.max(0, d), false, extension_prompt_roles.SYSTEM);
     } else {
-        setExtensionPrompt(PROMPT_KEY_COMBAT, '', 2, 0, false, extension_prompt_roles.SYSTEM);
+        setExtensionPrompt(PROMPT_KEY_COMBAT, '', injPos(), 0, false, extension_prompt_roles.SYSTEM);
     }
 }
 
@@ -2137,6 +2276,7 @@ function settingsHtml() {
             ${sub(`❤️ ${t('sec_health')}`, `
                 ${num(t('set_maxhp'), 'rpg-vit-maxhp', 'min="1"')}
                 ${num(t('set_depth'), 'rpg-vit-depth', 'min="0"')}
+                ${chk('rpg-vit-inchat', t('set_inchat'))}
                 ${chk('rpg-vit-stack', t('set_stack'))}
                 ${chk('rpg-vit-autoexpire', t('set_autoexpire'))}
                 <div class="rpg-vit-in">${num(t('set_autoexpire_max'), 'rpg-vit-autoexpire-max', 'min="1" max="200"')}</div>
@@ -2208,6 +2348,9 @@ function setupUI() {
         renderPanel(); buildInjection();
     });
     $('#rpg-vit-maxhp').val(settings.defaultMaxHp).on('change', function () { settings.defaultMaxHp = Math.max(1, parseInt($(this).val()) || 100); saveSettings(); });
+    // the depths only mean something in the chat: at the top of the prompt SillyTavern ignores them
+    const depthLock = () => ['#rpg-vit-depth', '#rpg-vit-combat-depth'].forEach(sel => $(sel).css('opacity', settings.inChat ? '' : '0.55').attr('title', settings.inChat ? '' : t('set_depth_off')));
+    $('#rpg-vit-inchat').prop('checked', !!settings.inChat).on('change', function () { settings.inChat = this.checked; saveSettings(); depthLock(); buildInjection(); });
     $('#rpg-vit-depth').val(settings.injectDepth).on('change', function () { settings.injectDepth = Math.max(0, parseInt($(this).val()) || 0); $(this).val(settings.injectDepth); saveSettings(); buildInjection(); });
     $('#rpg-vit-hunger-en').prop('checked', !!settings.hungerEnabled).on('change', function () { settings.hungerEnabled = this.checked; saveSettings(); renderPanel(); buildInjection(); });
     $('#rpg-vit-hunger-every').val(settings.hungerDrainEvery).on('change', function () { settings.hungerDrainEvery = Math.max(1, parseInt($(this).val()) || 3); saveSettings(); });
@@ -2256,6 +2399,7 @@ function setupUI() {
     femLock();
     $('#rpg-vit-combat-inject').prop('checked', settings.combatInject !== false).on('change', function () { settings.combatInject = this.checked; saveSettings(); buildInjection(); });
     $('#rpg-vit-combat-depth').val(typeof settings.combatDepth === 'number' ? settings.combatDepth : settings.injectDepth).on('change', function () { settings.combatDepth = Math.max(0, parseInt($(this).val()) || 0); saveSettings(); buildInjection(); });
+    depthLock();
     $('#rpg-vit-combat-auto').prop('checked', !!settings.combatAuto).on('change', function () { settings.combatAuto = this.checked; saveSettings(); });
     $('#rpg-vit-combat-scan').val(Math.max(1, Math.min(10, settings.combatScanMsgs || 4))).on('change', function () { settings.combatScanMsgs = Math.max(1, Math.min(10, parseInt($(this).val()) || 4)); saveSettings(); });
     $('#rpg-vit-url').val(settings.baseUrl).on('input', function () { settings.baseUrl = $(this).val().trim(); saveSettings(); });
@@ -2277,6 +2421,9 @@ jQuery(() => {
         setTimeout(() => { loadState(pendingChatId || getContext().chatId); renderButton(); _builtSig = null; renderPanel(); buildInjection(); }, 100);
     });
     eventSource.on(event_types.MESSAGE_RECEIVED, (id) => onBotMessage(id));
+    if (event_types.MESSAGE_SWIPED) eventSource.on(event_types.MESSAGE_SWIPED, (id) => onSwiped(id));
+    if (event_types.MESSAGE_DELETED) eventSource.on(event_types.MESSAGE_DELETED, (len) => onDeleted(len));
+    ['GENERATION_STOPPED', 'GENERATION_ENDED'].forEach(k => { if (event_types[k]) eventSource.on(event_types[k], () => onGenerationDone()); });
     if (event_types.MESSAGE_SENT) eventSource.on(event_types.MESSAGE_SENT, (id) => onUserMessage(id));
 });
 
