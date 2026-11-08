@@ -1,5 +1,8 @@
 import { getContext, extension_settings } from '../../../extensions.js';
 import { eventSource, event_types, saveChatDebounced, saveSettingsDebounced, setExtensionPrompt, extension_prompt_roles } from '../../../../script.js';
+import { user_avatar } from '../../../personas.js';
+import { power_user } from '../../../power-user.js';
+import { selected_world_info } from '../../../world-info.js';
 
 const MODULE_NAME = 'rpg_vitals';
 const PROMPT_KEY = 'rpg_vitals_injection';
@@ -44,7 +47,11 @@ const defaultSettings = {
     temperature: 0.4,
     strictJson: true,
     chatStates: {},
-    chatStamps: {}   // chatId -> last-used timestamp, lets stale states be pruned
+    chatStamps: {},  // chatId -> last-used timestamp, lets stale states be pruned
+    // the skill tree: on, only while a trial runs, the line's depth, branches, its texts ('' = standard), the trees by persona
+    skillsEnabled: true, skillsOnlyTrials: true, skillDepth: 2, skillBranches: 2,
+    skillClassesOn: true, skillScanCard: true, skillScanLore: true,   // the class step, and what it reads about the world
+    skillPrompt: '', skillUseLine: '', skillComboLine: '', skillClassPrompt: '', skillTrees: {}, skillClasses: {}
 };
 
 let settings = {};
@@ -115,6 +122,27 @@ const I18N = {
         set_mana: 'Enable mana (the story raises and spends it)',
         set_fatigue: 'Enable fatigue (rises with exertion, falls with rest)',
         sec_api: 'Connection', sec_health: 'Health & effects', sec_hunger: 'Hunger', sec_extra: 'Level, mana, fatigue', sec_scan: 'Reading the scene', sec_combat: 'Combat', sec_angel: 'Angel',
+        sec_skills: 'Skill tree', set_sk_en: 'Skill tree (a 🌿 button on the card, skills in the message box)', set_sk_trials: 'Skills work only in a dungeon (RPG Map)',
+        set_sk_classes: 'Choose a class before the tree grows', set_sk_scancard: 'Classes and the tree read the character card', set_sk_scanlore: 'Classes and the tree read the lorebooks',
+        set_sk_depth: 'Skill line depth:', set_sk_branches: 'Branches in a new tree:', set_sk_prompts: 'Texts for the model', set_sk_reset: 'Restore default',
+        set_sk_p_tree: 'Making the tree · {NAME} {SOURCE} {WORLD} {CLASS} {BRANCHES} {LANG}', set_sk_p_class: 'Suggesting classes · {NAME} {SOURCE} {WORLD} {N} {LANG}',
+        sk_class_h: 'Class', sk_class_suggest: 'Suggest classes for this world', sk_class_more: 'Other classes', sk_class_busy: 'Reading the world…', sk_class_fail: 'Could not suggest classes — check the connection or try another model.',
+        sk_class_own: 'Or your own', sk_class_own_ph: 'Your own class…', sk_class_now: 'The tree will grow around: {name}', sk_class_none: 'No class: the tree grows from the persona alone',
+        sk_regrow: 'A new tree: the class decides what the branches are about.', sk_back_tree: 'Back to the tree', set_sk_p_use: 'Line when a skill is used · {NAME} {SKILL} {DESC} {COST} {SIDE}', set_sk_p_combo: 'Line for a joint move · {NAME} {PARTNER} {SKILL} {RESULT}',
+        sk_tree: 'Skill tree', sk_bar: 'Skills', sk_stage: 'The tree: drag to move, wheel or + and − to zoom',
+        sk_empty: 'The class decides what the branches are about.', sk_empty_plain: 'The tree grows from your persona and this story.', sk_make: 'Grow the tree', sk_make_note: 'One request to the model, once for your persona in this story.',
+        sk_making: 'Growing the tree…', sk_made: 'The tree has grown.', sk_make_fail: 'The tree could not be grown', sk_fail_shape: 'the model answered, but not with a tree (its answer is in the console, F12)', sk_fail_empty: 'the model gave an empty answer', sk_part: 'The tree is unfinished: the model wrote {n} skills of {all}, twice{why}. “Grow anew” tries again.', sk_stop_len: 'it ran out of answer length (raise the context size of your local server)', sk_tok: '(read {i} tokens, wrote {o})', sk_no_key: 'No API key in RPG Vitals.',
+        sk_remake: 'Grow anew', sk_remake_q: 'Grow a new tree? The skills learned in this chat are forgotten.', sk_reset: 'Forget the skills', sk_reset_q: 'Forget every skill learned in this chat? The points come back.',
+        sk_pts: 'Points: {n}', sk_pts_t: 'One at the start, one per level, and those won in trials', sk_lvl: 'Level {n}', sk_lvl_off: 'Levels are off: points come only from trials',
+        sk_st_taken: 'Learned', sk_st_sealed: 'Sealed: the other skill of this tier was chosen', sk_st_locked: 'Learn a skill of the tier below first', sk_st_open: 'Can be learned', sk_st_nopoints: 'No points left',
+        sk_take: 'Learn · 1 point', sk_learned: 'Learned', sk_pin: 'To the bar', sk_unpin: 'Take off the bar', sk_on_bar: 'On the bar', sk_close_d: 'Close', sk_on_whom: 'on whom?', sk_self: 'Myself', sk_fx_on: 'on {name}', sk_box_on: '*{name} uses "{skill}" on {target}: {desc}*', sk_next_reply: 'It is in your message: send it', sk_box_use: '*{name} uses "{skill}": {desc}*', sk_box_combo: '*{name} calls {partner} for a joint move: "{skill}".*', sk_with: 'With whom',
+        sk_price: 'Price', sk_side: 'Side effect: {name}, {n} turns', sk_cd_every: 'Again after {n} replies', sk_cooldown: 'ready in {n} replies',
+        sk_k_damage: 'Strike', sk_k_heal: 'Healing', sk_k_shield: 'Shield', sk_k_summon: 'Summoning', sk_k_reveal: 'Revealing', sk_k_escape: 'Escape', sk_k_sway: 'Persuasion', sk_k_trick: 'Trick',
+        sk_used: 'Skill', sk_only_trials: 'Skills wake only in a dungeon.', sk_off: 'The skill tree is off.', sk_no_mana: 'Not enough mana.', sk_too_tired: 'Too tired for that.',
+        sk_fx_hit: '{name} −{n}', sk_fx_down: '{name} is down', sk_fx_heal: '+{n} HP', sk_fx_buff: '{name} is on',
+        sk_combo: 'Joint move', sk_trust: 'Trust {n}% — the chance to join in', sk_trust_none: 'Trust unknown: even odds',
+        sk_combo_ok: '{name} joined in! ({roll} of {chance})', sk_combo_fail: '{name} did not join in ({roll}, needed {chance} or less)',
+        sk_zoom_in: 'Zoom in', sk_zoom_out: 'Zoom out', sk_zoom_fit: 'Back to the start',
         set_intimacy: 'Notice intimate scenes (afterglow, marks, soreness…)',
         set_intimacy_hint: 'Works inside the same reading of the scene — no extra request. Needs "Auto-update from the story".',
         intimacy_toast: 'After the night with {name}:', intimacy_toast_anon: 'After the intimate scene:',
@@ -187,6 +215,27 @@ const I18N = {
         set_mana: 'Включить ману (сюжет её тратит и восполняет)',
         set_fatigue: 'Включить усталость (растёт от нагрузки, падает при отдыхе)',
         sec_api: 'Подключение', sec_health: 'Здоровье и эффекты', sec_hunger: 'Голод', sec_extra: 'Уровень, мана, усталость', sec_scan: 'Чтение сцены', sec_combat: 'Бой', sec_angel: 'Ангел',
+        sec_skills: 'Древо навыков', set_sk_en: 'Древо навыков (кнопка 🌿 на карточке, навыки в поле ввода)', set_sk_trials: 'Навыки работают только во время испытания (RPG Map)',
+        set_sk_classes: 'Выбирать класс перед древом', set_sk_scancard: 'Классы и древо читают карточку персонажа', set_sk_scanlore: 'Классы и древо читают лорбуки',
+        set_sk_depth: 'Глубина строки навыка:', set_sk_branches: 'Веток в новом древе:', set_sk_prompts: 'Тексты для модели', set_sk_reset: 'Вернуть стандартное',
+        set_sk_p_tree: 'Создание древа · {NAME} {SOURCE} {WORLD} {CLASS} {BRANCHES} {LANG}', set_sk_p_class: 'Подбор классов · {NAME} {SOURCE} {WORLD} {N} {LANG}',
+        sk_class_h: 'Класс', sk_class_suggest: 'Подобрать классы под этот мир', sk_class_more: 'Другие классы', sk_class_busy: 'Читаю мир…', sk_class_fail: 'Не удалось подобрать классы — проверь подключение или попробуй другую модель.',
+        sk_class_own: 'Или свой', sk_class_own_ph: 'Свой класс…', sk_class_now: 'Древо вырастет вокруг: {name}', sk_class_none: 'Без класса: древо вырастет из одной персоны',
+        sk_regrow: 'Новое древо: класс решает, о чём будут ветки.', sk_back_tree: 'Назад к древу', set_sk_p_use: 'Строка при навыке · {NAME} {SKILL} {DESC} {COST} {SIDE}', set_sk_p_combo: 'Строка совместного приёма · {NAME} {PARTNER} {SKILL} {RESULT}',
+        sk_tree: 'Древо навыков', sk_bar: 'Навыки', sk_stage: 'Древо: тащи, чтобы двигать; колесо или + и −, чтобы приблизить',
+        sk_empty: 'Класс решает, о чём будут ветки.', sk_empty_plain: 'Древо вырастет из твоей персоны и этой истории.', sk_make: 'Вырастить древо', sk_make_note: 'Один запрос к модели, один раз для твоей персоны в этой истории.',
+        sk_making: 'Древо растёт…', sk_made: 'Древо выросло.', sk_make_fail: 'Не удалось вырастить древо', sk_fail_shape: 'модель ответила, но не древом (её ответ в консоли, F12)', sk_fail_empty: 'модель вернула пустой ответ', sk_part: 'Древо недописано: модель дважды написала {n} навыков из {all}{why}. «Вырастить заново» — ещё попытка.', sk_stop_len: 'ей не хватило длины ответа (увеличь размер контекста у локального сервера)', sk_tok: '(прочитала {i} токенов, написала {o})', sk_no_key: 'В RPG Vitals нет ключа API.',
+        sk_remake: 'Вырастить заново', sk_remake_q: 'Вырастить новое древо? Навыки, изученные в этом чате, забудутся.', sk_reset: 'Забыть навыки', sk_reset_q: 'Забыть все навыки этого чата? Очки вернутся.',
+        sk_pts: 'Очки: {n}', sk_pts_t: 'Одно на старте, по одному за уровень и выигранные в испытаниях', sk_lvl: 'Уровень {n}', sk_lvl_off: 'Уровни выключены: очки только из испытаний',
+        sk_st_taken: 'Изучен', sk_st_sealed: 'Запечатан: на этом ярусе выбран другой навык', sk_st_locked: 'Сначала изучи навык ярусом ниже', sk_st_open: 'Можно изучить', sk_st_nopoints: 'Очков не осталось',
+        sk_take: 'Изучить · 1 очко', sk_learned: 'Изучено', sk_pin: 'На панель', sk_unpin: 'Убрать с панели', sk_on_bar: 'На панели', sk_close_d: 'Закрыть', sk_on_whom: 'на кого?', sk_self: 'На себя', sk_fx_on: 'на {name}', sk_box_on: '*{name} использует «{skill}» на {target}: {desc}*', sk_next_reply: 'Он уже в твоём сообщении: отправь его', sk_box_use: '*{name} использует «{skill}»: {desc}*', sk_box_combo: '*{name} зовёт {partner} на совместный приём: «{skill}».*', sk_with: 'С кем',
+        sk_price: 'Цена', sk_side: 'Побочный эффект: {name}, ходов: {n}', sk_cd_every: 'Снова через {n} ответов', sk_cooldown: 'готов через {n} отв.',
+        sk_k_damage: 'Удар', sk_k_heal: 'Лечение', sk_k_shield: 'Щит', sk_k_summon: 'Призыв', sk_k_reveal: 'Прозрение', sk_k_escape: 'Побег', sk_k_sway: 'Убеждение', sk_k_trick: 'Уловка',
+        sk_used: 'Навык', sk_only_trials: 'Навыки просыпаются только в испытании.', sk_off: 'Древо навыков выключено.', sk_no_mana: 'Не хватает маны.', sk_too_tired: 'Сил на это не хватит.',
+        sk_fx_hit: '{name} −{n}', sk_fx_down: '{name} повержен', sk_fx_heal: '+{n} HP', sk_fx_buff: '«{name}» действует',
+        sk_combo: 'Совместный приём', sk_trust: 'Доверие {n}% — шанс, что подхватит', sk_trust_none: 'Доверие неизвестно: шансы пополам',
+        sk_combo_ok: '{name} подхватил(а)! ({roll} из {chance})', sk_combo_fail: '{name} не подхватил(а) ({roll}, нужно {chance} или меньше)',
+        sk_zoom_in: 'Приблизить', sk_zoom_out: 'Отдалить', sk_zoom_fit: 'Вернуть как было',
         set_intimacy: 'Замечать интимные сцены (нега, следы, ломота…)',
         set_intimacy_hint: 'Работает в том же чтении сцены — без отдельного запроса. Нужно «Авто-обновление из сюжета».',
         intimacy_toast: 'После ночи с {name}:', intimacy_toast_anon: 'После интимной сцены:',
@@ -260,6 +309,14 @@ function loadSettings() {
     if (!Number.isFinite(settings.injectDepth)) settings.injectDepth = defaultSettings.injectDepth;
     if (settings.combatDepth != null && !Number.isFinite(settings.combatDepth)) settings.combatDepth = defaultSettings.combatDepth;
     if (!Number.isFinite(settings.defaultMaxHp)) settings.defaultMaxHp = defaultSettings.defaultMaxHp;
+    if (!settings.skillTrees || typeof settings.skillTrees !== 'object' || Array.isArray(settings.skillTrees)) settings.skillTrees = {};
+    Object.keys(settings.skillTrees).forEach(k => { if (k === '__proto__' || k === 'constructor' || k === 'prototype') delete settings.skillTrees[k]; });
+    settings.skillDepth = Math.max(0, Math.min(50, Math.round(Number(settings.skillDepth)))); if (!Number.isFinite(settings.skillDepth)) settings.skillDepth = 2;
+    settings.skillBranches = [2, 3, 4, 5, 6].includes(Number(settings.skillBranches)) ? Number(settings.skillBranches) : 2;
+    ['skillClassesOn', 'skillScanCard', 'skillScanLore'].forEach(k => { if (typeof settings[k] !== 'boolean') settings[k] = true; });
+    ['skillPrompt', 'skillUseLine', 'skillComboLine', 'skillClassPrompt'].forEach(k => { if (typeof settings[k] !== 'string') settings[k] = ''; });
+    if (!settings.skillClasses || typeof settings.skillClasses !== 'object' || Array.isArray(settings.skillClasses)) settings.skillClasses = {};
+    Object.keys(settings.skillClasses).forEach(k => { if (k === '__proto__' || k === 'constructor' || k === 'prototype') delete settings.skillClasses[k]; });
 }
 function saveSettings() {
     extension_settings[MODULE_NAME] = settings;
@@ -700,6 +757,11 @@ window.addEventListener('rpg:birth', e => {
 });
 
 // ---- combat / enemies ----
+/* Another extension (the Map's trials) can ask for the combat scan while a fight lasts. It is held
+   only in memory, per asker, and never touches the saved checkbox: when the last one lets go,
+   the scan is back to what you set. */
+const combatHolds = new Set();
+function combatScanOn() { return !!settings.combatAuto || combatHolds.size > 0; }
 function playerAttackPower() {
     let base = 2; // unarmed
     try {
@@ -841,10 +903,11 @@ function apiUrl() { return normalizeBase(apiConf().url) || 'https://openrouter.a
 function apiModel() { return apiConf().model || ''; }
 function borrowedFrom() { return apiConf().from; }
 
-async function callAI(systemPrompt, userPrompt) {
+async function callAI(systemPrompt, userPrompt, opts) {
     if (!apiKey()) throw new Error('API key is not set!');
     const endpointUrl = apiUrl() + '/chat/completions';
-    for (let i = 0; i < 2; i++) {
+    const tries = opts && opts.once ? 1 : 2;   // a long answer is not asked for twice behind the caller's back
+    for (let i = 0; i < tries; i++) {
         try {
             const response = await fetch(endpointUrl, {
                 method: 'POST',
@@ -853,16 +916,23 @@ async function callAI(systemPrompt, userPrompt) {
                     model: apiModel(),
                     messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
                     temperature: settings.temperature,
+                    // a long answer (the skill tree) is given room: a local server otherwise stops at its own short default
+                    ...(opts && opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
                     ...(wantsStrictJson(endpointUrl) ? { response_format: { type: 'json_object' } } : {})
                 })
             });
             if (response.status === 429 && i === 0) { await new Promise(r => setTimeout(r, 2000)); continue; }
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
-            const content = data.choices[0].message.content.trim();
+            const ch0 = (data.choices && data.choices[0]) || {};
+            const msg0 = ch0.message || {};
+            // a thinking model may leave "content" empty and put everything in its reasoning; a plain completion server answers in "text"
+            const content = String(msg0.content || ch0.text || msg0.reasoning_content || msg0.reasoning || '').trim();
+            if (opts) { opts.raw = content; opts.finish = String(ch0.finish_reason || ''); opts.usage = data.usage && typeof data.usage === 'object' ? data.usage : null; }
+            if (opts && opts.lenient) return skLooseJson(content);   // not JSON at all: null, the caller says why
             const m = content.match(/\{[\s\S]*\}/);
             return JSON.parse(m ? m[0] : content);
-        } catch (e) { if (i === 1) throw e; }
+        } catch (e) { if (i === tries - 1) throw e; }
     }
 }
 const EAT_RE = /\b(eat|eats|eating|ate|drink|drinks|drinking|drank|bite|bites|chew|chews|swallow|swallows|sip|sips|munch|devour|feast|gulp|nibble)\b|съе(л|ла|сть|ем|шь)|\bест\b|поел|перекус|откус|кус(аю|нул)|жу(ю|ёт)|пь(ю|ёт)|пил[аои]?\b|выпи|глот|хлебн|заеда/i;
@@ -1004,7 +1074,7 @@ Output strictly JSON: {${fields}}`;
             // skip narrative damage ONLY when the combat scan already subtracted damage for
             // this very message; otherwise story wounds (traps, falls, ambush narration)
             // never reached HP at all with combatAuto on
-            if (hpd < 0 && settings.combatAuto && opts && opts.combatDmg > 0) hpd = 0;
+            if (hpd < 0 && combatScanOn() && opts && opts.combatDmg > 0) hpd = 0;
 
             /* Second line of defence. A prompt is a request, not a guarantee, and the
                one thing worth being sure about is damage: healing the player by mistake
@@ -1055,7 +1125,7 @@ Output strictly JSON: {${fields}}`;
     } catch (e) { /* silent: don't disrupt chat on API errors */ } finally { if (vitalsBusy === myEpoch) vitalsBusy = false; }
 }
 async function analyzeCombat(messageId) {
-    if (!settings.enabled || !settings.combatAuto || !apiKey() || !state) return 0;
+    if (!settings.enabled || !combatScanOn() || !apiKey() || !state) return 0;
     const myChat = currentChatId;
     const myEpoch = turnEpoch;
     const ctx = getContext();
@@ -1113,6 +1183,8 @@ Output strictly JSON: {"new_enemies":[{"name":"","hp":20,"atk":8}],"hits_on_enem
             damage(dmgApplied);
         }
         saveState(); renderPanel(); buildInjection();
+        // others that follow the fight (the Map's trials) hear that the foes changed
+        try { window.dispatchEvent(new CustomEvent('rpg:vitals-enemies', { detail: { messageId } })); } catch (e) { }
         if (notes.length) toastr.info(t('combat_changed') + ' ' + notes.join(', '));
         return dmgApplied;   // lets the narrative scan know combat already took this message's damage
     } catch (e) { /* silent: never disrupt chat on API errors */ }
@@ -1122,6 +1194,7 @@ function tickBuffs(messageId) {
     if (!settings.enabled || !state) return;
     const msg = getContext().chat[messageId];
     if (!msg || msg.is_user || msg.is_system) return;
+    try { skillTick(); } catch (e) { console.warn('[RPG Vitals] skills tick', e); }
     const expired = [];   // collect ALL that wore off this tick, not just the last one
     state.buffs = state.buffs.filter(b => {
         if (b.duration == null) return true;
@@ -1307,8 +1380,11 @@ function buildInjection() {
     if (!settings.enabled || !state || settings.injectDepth < 0) {
         setExtensionPrompt(PROMPT_KEY, '', injPos(), 0, false, extension_prompt_roles.SYSTEM);
         setExtensionPrompt(PROMPT_KEY_STARVE, '', injPos(), 0, false, extension_prompt_roles.SYSTEM);
-        setExtensionPrompt(PROMPT_KEY_COMBAT, '', injPos(), 0, false, extension_prompt_roles.SYSTEM); return;
+        setExtensionPrompt(PROMPT_KEY_COMBAT, '', injPos(), 0, false, extension_prompt_roles.SYSTEM);
+        try { setExtensionPrompt(PROMPT_KEY_SKILL, '', 1, 0, false, extension_prompt_roles.SYSTEM); } catch (e) { }
+        return;
     }
+    try { skillInjection(); } catch (e) { console.warn('[RPG Vitals] skills line', e); }
     let parts = [t('inject_hp', { hp: state.hp, max: state.maxHp })];
     if (settings.levelEnabled) parts.push(t('inject_level', { n: state.level }));
     if (state.buffs.length) {
@@ -1934,7 +2010,7 @@ function structSig() {
     const buffs = state.buffs.map(b => `${b.id}:${b.kind === 'debuff' ? 'd' : 'b'}:${b.duration == null ? 'x' : 'n'}:${b.effect ? 'e' : ''}:${b.count || 1}:${b.effect || ''}`).join(',');
     const enemies = state.enemies.map(e => `${e.id}:${e.hp}/${e.max}`).join(',');   // grouped rows aggregate hp — any change rebuilds
     return [
-        settings.language, !!settings.gmControls, !!settings.hungerEnabled, !!settings.manaEnabled,
+        settings.language, !!settings.gmControls, !!settings.skillsEnabled, !!(state && settings.skillsEnabled && myTree() && skPoints()), !!settings.hungerEnabled, !!settings.manaEnabled,
         !!settings.fatigueEnabled, !!settings.levelEnabled, flat,
         state.buffs.length === 0 ? 'empty' : 'has', buffs,
         (settings.gmControls || state.enemies.length) ? 'combat' : 'nocombat', enemies,
@@ -2146,6 +2222,7 @@ function buildPanel() {
             <div class="vex-pulse">${PULSE}</div>
             <div class="vex-title"><h1>${escapeHtml(t('panel_title'))}</h1><div class="sub">${escapeHtml(t('vex_sub'))}</div></div>
             ${levelChip}
+            ${settings.skillsEnabled ? `<button class="vex-tree" aria-label="${escapeHtml(t('sk_tree'))}" title="${escapeHtml(t('sk_tree'))}">🌿${state && skPoints() && myTree() ? '<i class="vex-tree-pt"></i>' : ''}</button>` : ''}
             <button class="vex-close" aria-label="${escapeHtml(t('close'))}">✕</button>
         </div>
         <div class="vex-cols">
@@ -2185,6 +2262,7 @@ function buildPanel() {
     </div></div>`);
 
     body.find('.vex-close').off('click').on('click', () => $('#rpg-vit-modal').removeClass('visible'));
+    body.find('.vex-tree').off('click').on('click', () => openTreeWin());
     body.find('.rpg-vit-heal').off('click').on('click', () => heal(parseInt(body.find('.rpg-vit-amt').val()) || 0));
     body.find('.rpg-vit-feed').off('click').on('click', () => feed(parseInt(body.find('.rpg-vit-h-amt').val()) || 0));
     body.find('.rpg-vit-h-set').off('click').on('click', () => setHunger(parseInt(body.find('.rpg-vit-h-amt').val()) || 0));
@@ -2319,6 +2397,31 @@ function settingsHtml() {
                 <div class="rpg-vit-in">${num(t('set_combat_scan'), 'rpg-vit-combat-scan', 'min="1" max="10"')}</div>
                 ${chk('rpg-vit-combat-inject', t('set_combat_inject'))}
                 <div class="rpg-vit-in">${num(t('set_combat_depth'), 'rpg-vit-combat-depth', 'min="0"')}</div>`)}
+            ${sub(`🌿 ${t('sec_skills')}`, `
+                ${chk('rpg-vit-sk-en', t('set_sk_en'))}
+                <div class="rpg-vit-in">
+                    ${chk('rpg-vit-sk-trials', t('set_sk_trials'))}
+                    ${chk('rpg-vit-sk-classes', t('set_sk_classes'))}
+                    <div class="rpg-vit-in">
+                        ${chk('rpg-vit-sk-scancard', t('set_sk_scancard'))}
+                        ${chk('rpg-vit-sk-scanlore', t('set_sk_scanlore'))}
+                    </div>
+                    ${num(t('set_sk_depth'), 'rpg-vit-sk-depth', 'min="0" max="50"')}
+                    <div class="rpg-vit-srow"><label for="rpg-vit-sk-branches">${t('set_sk_branches')}</label><select id="rpg-vit-sk-branches" class="text_pole">${[2, 3, 4, 5, 6].map(n => `<option value="${n}">${n}</option>`).join('')}</select></div>
+                    <div class="inline-drawer rpg-vit-skp">
+                        <div class="inline-drawer-toggle inline-drawer-header"><b>📝 ${t('set_sk_prompts')}</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>
+                        <div class="inline-drawer-content" style="display:none;">
+                            <div class="rpg-vit-skp-h"><label for="rpg-vit-sk-p-class">${t('set_sk_p_class')}</label><button type="button" class="rpg-vit-sk-reset" data-for="skillClassPrompt" title="${t('set_sk_reset')}"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ${t('set_sk_reset')}</button></div>
+                            <textarea id="rpg-vit-sk-p-class" class="text_pole" rows="7"></textarea>
+                            <div class="rpg-vit-skp-h"><label for="rpg-vit-sk-p-tree">${t('set_sk_p_tree')}</label><button type="button" class="rpg-vit-sk-reset" data-for="skillPrompt" title="${t('set_sk_reset')}"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ${t('set_sk_reset')}</button></div>
+                            <textarea id="rpg-vit-sk-p-tree" class="text_pole" rows="8"></textarea>
+                            <div class="rpg-vit-skp-h"><label for="rpg-vit-sk-p-use">${t('set_sk_p_use')}</label><button type="button" class="rpg-vit-sk-reset" data-for="skillUseLine" title="${t('set_sk_reset')}"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ${t('set_sk_reset')}</button></div>
+                            <textarea id="rpg-vit-sk-p-use" class="text_pole" rows="3"></textarea>
+                            <div class="rpg-vit-skp-h"><label for="rpg-vit-sk-p-combo">${t('set_sk_p_combo')}</label><button type="button" class="rpg-vit-sk-reset" data-for="skillComboLine" title="${t('set_sk_reset')}"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ${t('set_sk_reset')}</button></div>
+                            <textarea id="rpg-vit-sk-p-combo" class="text_pole" rows="3"></textarea>
+                        </div>
+                    </div>
+                </div>`)}
             ${sub(`🕯️ ${t('sec_angel')}`, `
                 ${chk('rpg-vit-angel', t('angel_set'))}
                 <div class="rpg-vit-note">${t('angel_hint')}</div>
@@ -2342,8 +2445,8 @@ function setupUI() {
         const mark = $('<div class="rpg-vit-mark"></div>').insertBefore(here);   // rebuilt where it was, not at the end of the list
         $('.rpg-vit-settings').remove(); setupUI();
         mark.replaceWith($('.rpg-vit-settings').detach());
-        $('.rpg-vit-settings .inline-drawer-content').show();
-        $('.rpg-vit-settings .inline-drawer-icon').removeClass('down').addClass('up');
+        $('.rpg-vit-settings .inline-drawer-content').not('.rpg-vit-skp > .inline-drawer-content').show();   // the panel stays open, the texts for the model stay folded
+        $('.rpg-vit-settings .inline-drawer-icon').not('.rpg-vit-skp .inline-drawer-icon').removeClass('down').addClass('up');
         $('#rpg-vit-btn').attr('title', t('btn_title')); $('#rpg-vit-title').text(t('panel_title'));
         renderPanel(); buildInjection();
     });
@@ -2364,6 +2467,21 @@ function setupUI() {
     $('#rpg-vit-mana-en').prop('checked', !!settings.manaEnabled).on('change', function () { settings.manaEnabled = this.checked; saveSettings(); renderPanel(); buildInjection(); });
     $('#rpg-vit-fatigue-en').prop('checked', !!settings.fatigueEnabled).on('change', function () { settings.fatigueEnabled = this.checked; saveSettings(); renderPanel(); buildInjection(); });
     $('#rpg-vit-angel').prop('checked', !!settings.angelEnabled).on('change', function () { settings.angelEnabled = this.checked; saveSettings(); });
+    /* the skill tree */
+    const skRefresh = () => { _builtSig = null; renderPanel(); buildInjection(); renderSkillBar(); if (document.getElementById('rpg-sk-win')) renderTreeWin(); };
+    $('#rpg-vit-sk-en').prop('checked', !!settings.skillsEnabled).on('change', function () { settings.skillsEnabled = this.checked; saveSettings(); if (!this.checked) closeTreeWin(); skRefresh(); });
+    $('#rpg-vit-sk-trials').prop('checked', !!settings.skillsOnlyTrials).on('change', function () { settings.skillsOnlyTrials = this.checked; saveSettings(); skRefresh(); });
+    $('#rpg-vit-sk-classes').prop('checked', !!settings.skillClassesOn).on('change', function () { settings.skillClassesOn = this.checked; saveSettings(); skRefresh(); });
+    $('#rpg-vit-sk-scancard').prop('checked', !!settings.skillScanCard).on('change', function () { settings.skillScanCard = this.checked; saveSettings(); });
+    $('#rpg-vit-sk-scanlore').prop('checked', !!settings.skillScanLore).on('change', function () { settings.skillScanLore = this.checked; saveSettings(); });
+    $('#rpg-vit-sk-depth').val(settings.skillDepth).on('change', function () { settings.skillDepth = Math.max(0, Math.min(50, parseInt(this.value, 10) || 0)); this.value = settings.skillDepth; saveSettings(); buildInjection(); });
+    $('#rpg-vit-sk-branches').val(String(settings.skillBranches)).on('change', function () { settings.skillBranches = skNum(this.value, 2, 6, 2); this.value = settings.skillBranches; saveSettings(); });
+    const SK_DEF = { skillClassPrompt: SKILL_CLASS_DEFAULT, skillPrompt: SKILL_TREE_DEFAULT, skillUseLine: SKILL_USE_DEFAULT, skillComboLine: SKILL_COMBO_DEFAULT };
+    const SK_FIELD = { skillClassPrompt: '#rpg-vit-sk-p-class', skillPrompt: '#rpg-vit-sk-p-tree', skillUseLine: '#rpg-vit-sk-p-use', skillComboLine: '#rpg-vit-sk-p-combo' };
+    Object.entries(SK_FIELD).forEach(([k, sel]) => $(sel).val(settings[k] || SK_DEF[k]).on('change', function () {
+        const v = String(this.value || '').slice(0, 8000); settings[k] = v.trim() === SK_DEF[k].trim() ? '' : v; saveSettings();
+    }).on('keydown', e => e.stopPropagation()));
+    $('.rpg-vit-sk-reset').on('click', function () { const k = this.dataset.for; if (!SK_FIELD[k]) return; settings[k] = ''; $(SK_FIELD[k]).val(SK_DEF[k]); saveSettings(); });
     $('#rpg-vit-angel-depth').val(settings.angelDepth || 6).on('change', function () {
         settings.angelDepth = Math.max(2, Math.min(30, parseInt(this.value, 10) || 6));
         this.value = settings.angelDepth; saveSettings();
@@ -2411,14 +2529,15 @@ jQuery(() => {
     loadSettings();
     pruneOldStates();
     setupUI();
-    if (getContext().chatId) { loadState(); renderButton(); buildInjection(); }
+    if (getContext().chatId) { loadState(); renderButton(); buildInjection(); renderSkillBar(); }
 
     eventSource.on(event_types.CHAT_CHANGED, (chatIdArg) => {
         // Release the previous chat's state at once: other modules react to this event too, and a
         // bridge call made before the switch completes must not save into the new chat.
         stateReady = false; currentChatId = null; pendingChatId = chatIdArg || null;
         state = freshState();
-        setTimeout(() => { loadState(pendingChatId || getContext().chatId); renderButton(); _builtSig = null; renderPanel(); buildInjection(); }, 100);
+        closeComboPick(); hideSkTip();
+        setTimeout(() => { loadState(pendingChatId || getContext().chatId); renderButton(); _builtSig = null; renderPanel(); buildInjection(); renderSkillBar(); if (document.getElementById('rpg-sk-win')) renderTreeWin(); }, 100);
     });
     eventSource.on(event_types.MESSAGE_RECEIVED, (id) => onBotMessage(id));
     if (event_types.MESSAGE_SWIPED) eventSource.on(event_types.MESSAGE_SWIPED, (id) => onSwiped(id));
@@ -2436,7 +2555,7 @@ window.RPG.vitals = {
     isEnabled: () => !!settings.enabled,
     getHp: () => { syncChat(); return state ? { hp: state.hp, max: state.maxHp } : null; },
     // read-only, for the novel's fight bar (Living Scene): the enemies as they are now, and which meters are on
-    getEnemies: () => { syncChat(); return state && Array.isArray(state.enemies) ? state.enemies.map(e => ({ name: String(e.name || ''), hp: Number(e.hp) || 0, max: Number(e.max) || 0 })) : []; },
+    getEnemies: () => { syncChat(); return state && Array.isArray(state.enemies) ? state.enemies.map(e => ({ id: e.id, name: String(e.name || ''), hp: Number(e.hp) || 0, max: Number(e.max) || 0 })) : []; },
     meters: () => ({ hunger: !!settings.hungerEnabled, mana: !!settings.manaEnabled, fatigue: !!settings.fatigueEnabled }),
     getHunger: () => { syncChat(); return state ? state.hunger : null; },
     feed: (n) => { syncChat(); return state ? feed(n) : 0; },
@@ -2454,7 +2573,1026 @@ window.RPG.vitals = {
     addFatigue: (n) => { syncChat(); if (state) addFatigue(n); },
     getLevel: () => { syncChat(); return state ? state.level : null; },
     addXp: (n) => { syncChat(); if (state) addXp(n); },
+    // a foe put into the tracker by another extension (the Map's trials); returns its id
+    addEnemy: (name, hp, atk) => { syncChat(); if (!state) return null; const e = addEnemy(String(name || '').slice(0, 80), hp, atk); return e ? e.id : null; },
+    removeEnemy: (id) => { syncChat(); if (state && id) removeEnemy(id); },
+    // the combat scan for as long as `who` holds it (on = true / false), without changing the checkbox
+    holdCombatScan: (who, on) => { const k = String(who || 'other'); if (on) combatHolds.add(k); else combatHolds.delete(k); return combatScanOn(); },
+    combatScanOn: () => combatScanOn(),
+    // the skill tree: are skills on, a point won in a trial, redraw the bar (a trial began or ended)
+    skillsOn: () => skillsOn(),
+    addSkillPoints: (n) => { syncChat(); const s = state ? skState() : null; if (!s) return 0; s.bonus = Math.min(999, s.bonus + Math.max(1, Math.min(3, Math.round(Number(n) || 1)))); saveState(); renderSkillBar(); _builtSig = null; renderPanel(); if (document.getElementById('rpg-sk-win')) renderTreeWin(); return s.bonus; },
+    // the skills you can use right now (learned, awake, not cooling down) — RPG Map offers them among the choices
+    skillsNow: () => { try { syncChat(); const s = state ? skState() : null; if (!s || !skActiveNow() || !myTree()) return []; return s.taken.filter(id => !(s.cd[id] > 0)).map(skillById).filter(Boolean).map(sk => ({ id: sk.id, name: sk.name, desc: sk.desc })); } catch (e) { return []; } },
+    // use one as a chosen action: the price is taken and the model is told, the text is sent by the caller
+    useSkill: (id) => { try { return useSkill(String(id || ''), { quiet: true }) === true; } catch (e) { return false; } },
+    skillsRefresh: () => { try { syncChat(); renderSkillBar(); buildInjection(); if (document.getElementById('rpg-sk-win')) renderTreeWin(); } catch (e) { } },
     // the last intimate scene the story scan saw in this chat: { level: 'romantic'|'sex', with, messageId, at } or null
     lastIntimacy: () => { syncChat(); return state && state.lastIntimacy ? Object.assign({}, state.lastIntimacy) : null; },
     refresh: () => { loadState(getContext().chatId); _builtSig = null; renderPanel(); buildInjection(); }
 };
+
+/* ============================================================
+   SKILL TREE
+   Your own tree, drawn from your persona: two or three branches, three tiers each, and at every
+   tier two skills of which you may keep only one — the other is sealed for good. Points come with
+   levels and as trial rewards. Up to four learned skills sit as small buttons in the message box,
+   plus a joint move with whoever is at your side (it lands or not by their Trust in Bonds).
+   A skill costs what it says — mana, health, fatigue, hunger — and the code takes it: health spent
+   too freely calls the angel like any other wound. The story model gets one line, at its own depth,
+   saying what was done and what it cost. By default skills work only while a trial runs.
+   ============================================================ */
+const PROMPT_KEY_SKILL = 'rpg_vitals_skill';
+const SKILL_KINDS = ['damage', 'heal', 'shield', 'summon', 'reveal', 'escape', 'sway', 'trick'];
+const SKILL_BAR_MAX = 4;
+const SKILL_TREE_DEFAULT = `You design a small skill tree for a character in a role-play story, drawn from who they are.
+Character: {NAME}.
+{SOURCE}
+{WORLD}
+{CLASS}
+Everything in the tree must exist in this world as the card and the lorebook describe it: no magic, technology, creatures or customs it does not have (no spells in a world without magic, no machines from a later age).
+Make {BRANCHES} branches that fit this character (their nature, training, powers or temperament) and the world. Each branch has 3 tiers; each tier offers two skills, and taking one locks the other forever, so every choice costs something.
+Skills are actions the character performs in a scene, not passive bonuses: a strike with their weapon, a thrown flask, a spell, calling a beast to their side, slipping into the shadows, setting a trap, a feint, dragging someone out of danger. Each is something you can picture them doing in one moment of a fight, a chase or a tense scene, and it belongs to this world (a revolver or a vial of arsenic in the 19th century, a hack or a stim in cyberpunk, vaulting a window and dropping a pallet when hunted). Mix them: most act on foes or the surroundings, some strengthen or protect the character or an ally for a few turns.
+Every skill has a price paid by the one who uses it: mana, health, fatigue or hunger, or a lasting side effect, and the stronger the skill, the higher the price. Some skills must cost health.
+The "desc" says what the character does and what happens, in one vivid sentence.
+{LANG}
+Output strictly JSON: {"branches":[{"name":"","icon":"one emoji","tiers":[[{"name":"","desc":"one sentence, what it does in the story","cost":{"mana":0,"hp":0,"fatigue":0,"hunger":0},"effect":{"kind":"damage|heal|shield|summon|reveal|escape|sway|trick","power":1},"side":{"name":"","turns":0},"cooldown":2},{...}]]}]}`;
+const SKILL_CLASS_DEFAULT = `You suggest character classes for the player of a role-play story, made for this story's world and era.
+Player: {NAME}.
+{SOURCE}
+{WORLD}
+Suggest {N} classes that could exist in this world, named the way this world would name them (a necromancer in the 19th century may be a gravedigger who deals in arsenic; in cyberpunk a healer may be a back-alley ripperdoc). Use only what this world has, as the card and the lorebook describe it: no titles, crafts or powers it does not know. Make them different from each other: support, harm, cunning, summoning, protection.
+{LANG}
+Output strictly JSON: {"classes":[{"name":"two or three words","icon":"one emoji","desc":"at most eight words: what they do"}]}`;
+const SKILL_USE_DEFAULT = `[{NAME} uses "{SKILL}": {DESC} Price paid: {COST}.{SIDE} Show it in the story now, the effect and the price.]`;
+const SKILL_COMBO_DEFAULT = `[{NAME} calls {PARTNER} for a joint move "{SKILL}". {PARTNER} {RESULT}. Show it in the story now.]`;
+const SKILL_COMBO_OK = 'joins in and it lands';
+const SKILL_COMBO_FAIL = 'refuses or is too late, and the move fails';
+const SKILL_KIND_ICON = { damage: '⚔️', heal: '✚', shield: '🛡️', summon: '🐾', reveal: '👁️', escape: '💨', sway: '🗣️', trick: '🪤' };
+
+/* The answer of a local model: in a code fence, with a word before it, sometimes with a trailing comma.
+   The first whole object is taken; nothing is evaluated. */
+/* What small local models get wrong in a long JSON answer, put right before reading it:
+   quotes inside a text ("a "ghost" walks"), line breaks inside a text, // comments,
+   a missing comma between two items. Only the punctuation is touched, never the words. */
+function skRepairJson(src) {
+    const t0 = String(src || '');
+    let out = '', inS = false, k = 0;
+    const nextSolid = j => { while (j < t0.length && /\s/.test(t0[j])) j++; return j; };
+    for (; k < t0.length; k++) {
+        const c = t0[k];
+        if (inS) {
+            if (c === '\\') { out += c + (t0[k + 1] ?? ''); k++; continue; }
+            if (c === '"') {
+                const j = nextSolid(k + 1), d = t0[j];
+                // a real closing quote is followed by , : } ] or the end; a quote then a new line then "..." is a missing comma
+                const after = d === ',' || d === ':' ? t0[nextSolid(j + 1)] : '';
+                const ends = j >= t0.length || '}]'.includes(d)
+                    || (d === ',' && (after === undefined || '"{[}]/'.includes(after)))           // "...", "next"  — not  "a "ghost", it walks"
+                    || (d === ':' && (after === undefined || /["{\[\d\-tfn]/.test(after)))
+                    || (d === '"' && /[\r\n]/.test(t0.slice(k + 1, j)));
+                if (ends) { inS = false; out += c; }
+                else out += '\\"';
+                continue;
+            }
+            if (c === '\n') { out += '\\n'; continue; }
+            if (c === '\r') continue;
+            if (c === '\t') { out += ' '; continue; }
+            out += c; continue;
+        }
+        if (c === '/' && t0[k + 1] === '/') { while (k < t0.length && t0[k] !== '\n') k++; out += '\n'; continue; }
+        if (c === '/' && t0[k + 1] === '*') { const e = t0.indexOf('*/', k + 2); k = e < 0 ? t0.length : e + 1; continue; }
+        if (c === '"') {
+            // "a" "b", } {, ] [, 5 "b" with no comma between them
+            const prev = out.replace(/\s+$/, '').slice(-1);
+            if (prev && /["}\]\w]/.test(prev) && /\s$/.test(out)) out = out.replace(/\s+$/, '') + ',' + out.match(/\s+$/)[0];   // after a text, an object, a list, a number or true/false/null
+            inS = true; out += c; continue;
+        }
+        if (c === '{' || c === '[') {
+            const prev = out.replace(/\s+$/, '').slice(-1);
+            if (prev && '"}]'.includes(prev)) out = out.replace(/\s+$/, '') + ',' + (out.match(/\s+$/) || [''])[0];
+        }
+        out += c;
+    }
+    return out;
+}
+function skLooseJson(text) {
+    let t0 = skRepairJson(String(text || '').replace(/^\s*```(?:json)?\s*/i, '').replace(/```\s*$/, ''));
+    const i = t0.indexOf('{');
+    if (i < 0) return null;
+    let depth = 0, inS = false, esc = false, end = -1;
+    for (let k = i; k < t0.length; k++) {
+        const c = t0[k];
+        if (inS) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inS = false; continue; }
+        if (c === '"') inS = true;
+        else if (c === '{' || c === '[') depth++;
+        else if (c === '}' || c === ']') { depth--; if (depth === 0) { end = k; break; } }
+    }
+    if (end < 0) return skCutJson(t0.slice(i));
+    const body = t0.slice(i, end + 1).replace(/,\s*\{\s*\.\.\.\s*\}/g, '').replace(/,\s*([}\]])/g, '$1');   // "{...}" copied from the example is dropped
+    try { return JSON.parse(body); } catch (e) { return null; }
+}
+/* An answer that stopped in the middle (a local model out of room): everything up to the last finished
+   object or list is kept and the open brackets are closed. A half-written skill is simply left out. */
+function skCutJson(text) {
+    const stack = [];
+    let inS = false, esc = false, cut = -1, cutStack = null;
+    for (let k = 0; k < text.length; k++) {
+        const c = text[k];
+        if (inS) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inS = false; continue; }
+        if (c === '"') inS = true;
+        else if (c === '{' || c === '[') stack.push(c);
+        else if (c === '}' || c === ']') { stack.pop(); cut = k + 1; cutStack = stack.slice(); }
+    }
+    if (cut < 0 || !cutStack) return null;
+    let body = text.slice(0, cut).replace(/,\s*$/, '');
+    for (let k = cutStack.length - 1; k >= 0; k--) body += cutStack[k] === '{' ? '}' : ']';
+    body = body.replace(/,\s*\{\s*\.\.\.\s*\}/g, '').replace(/,\s*([}\]])/g, '$1');
+    try { return JSON.parse(body); } catch (e) { return null; }
+}
+function skillsOn() { return !!(settings.enabled && settings.skillsEnabled); }
+function skText(v, max) { return (typeof v === 'string' || typeof v === 'number') ? String(v).replace(/\s+/g, ' ').trim().slice(0, max) : ''; }
+function skNum(v, lo, hi, d) { v = Math.round(Number(v)); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; }
+function skEmoji(v) { const s = skText(v, 8); return s && !/[<>"'&]/.test(s) ? s : '✦'; }
+
+// whose tree: the persona you play now (her avatar, else her name)
+function skPersonaKey() {
+    let av = '';
+    try { av = String(user_avatar || ''); } catch (e) { av = ''; }
+    const me = av ? 'av:' + av : 'nm:' + String(playerName()).toLowerCase();
+    // one tree per persona in each world: the same persona may be a necromancer in one story and a netrunner in another
+    let world = '';
+    try {
+        const ctx = getContext();
+        if (ctx.groupId) world = 'g:' + ctx.groupId;
+        else if (ctx.characterId !== undefined && ctx.characters && ctx.characters[ctx.characterId]) world = 'c:' + (ctx.characters[ctx.characterId].avatar || ctx.characters[ctx.characterId].name);
+    } catch (e) { world = ''; }
+    return world ? me + '|' + world : me;
+}
+function normalizeSkill(x, bi, ti, si) {
+    if (!x || typeof x !== 'object') return null;
+    const name = skText(x.name, 60);
+    if (!name) return null;
+    const c = x.cost && typeof x.cost === 'object' ? x.cost : {};
+    const e = x.effect && typeof x.effect === 'object' ? x.effect : {};
+    const kind = SKILL_KINDS.includes(String(e.kind || '').toLowerCase()) ? String(e.kind).toLowerCase() : 'damage';
+    const sd = x.side && typeof x.side === 'object' ? x.side : {};
+    const sideName = skText(sd.name, 50);
+    return {
+        id: `b${bi}t${ti}s${si}`,
+        name, desc: skText(x.desc, 220),
+        cost: { mana: skNum(c.mana, 0, 100, 0), hp: skNum(c.hp, 0, 100, 0), fatigue: skNum(c.fatigue, 0, 100, 0), hunger: skNum(c.hunger, 0, 100, 0) },
+        effect: { kind, power: skNum(e.power, 1, 5, 1) },
+        side: sideName ? { name: sideName, turns: skNum(sd.turns, 1, 20, 2) } : null,
+        cooldown: skNum(x.cooldown, 0, 20, 2)
+    };
+}
+function skFindBranches(v, depth) {
+    if (!v || typeof v !== 'object' || depth > 4) return null;
+    if (Array.isArray(v)) return v.length && v.every(x => x && typeof x === 'object' && (x.tiers || x.levels || x.skills)) ? v : null;
+    if (Array.isArray(v.branches)) return v.branches;
+    if (v.branches && typeof v.branches === 'object') return Object.entries(v.branches).map(([k, b]) => Object.assign({ name: k }, b));
+    for (const k of Object.keys(v)) { const r = skFindBranches(v[k], depth + 1); if (r) return r; }
+    return null;
+}
+function skTierPair(tier) {
+    if (Array.isArray(tier)) return tier;
+    if (!tier || typeof tier !== 'object') return [];
+    if (Array.isArray(tier.skills)) return tier.skills;
+    if (Array.isArray(tier.options)) return tier.options;
+    if (Array.isArray(tier.choices)) return tier.choices;
+    const vals = Object.values(tier).filter(x => x && typeof x === 'object' && !Array.isArray(x) && x.name);
+    return vals;
+}
+// why the model stopped, in words the player can act on
+function skStopWhy(o) {
+    if (!o) return '';
+    const u = o.usage || {};
+    const tok = u.prompt_tokens ? ' ' + t('sk_tok', { i: u.prompt_tokens, o: u.completion_tokens || 0 }) : '';
+    if (o.finish === 'length') return ' — ' + t('sk_stop_len') + tok;
+    return tok ? ' —' + tok : '';
+}
+function normalizeTree(raw, nBranches) {
+    const arr = skFindBranches(raw, 0);
+    if (!arr) return null;
+    const branches = arr.slice(0, Math.max(1, nBranches || 3)).map((b, bi) => {
+        if (!b || typeof b !== 'object') return null;
+        let rawTiers = b.tiers || b.levels;
+        if (rawTiers && typeof rawTiers === 'object' && !Array.isArray(rawTiers)) rawTiers = Object.values(rawTiers);   // {"tier1": [...], "tier2": [...]}
+        if (!Array.isArray(rawTiers) && Array.isArray(b.skills)) { rawTiers = []; for (let k = 0; k < b.skills.length; k += 2) rawTiers.push(b.skills.slice(k, k + 2)); }
+        if (!Array.isArray(rawTiers)) return null;
+        const tiers = rawTiers.slice(0, 3).map((tier, ti) => {
+            const pair = skTierPair(tier).slice(0, 2).map((s, si) => normalizeSkill(s, bi, ti, si)).filter(Boolean);
+            return pair.length === 2 ? pair : null;
+        });
+        // a model that wrote fewer tiers still gets a tree: the tiers it finished, in order
+        const done = []; for (const x of tiers) { if (!x) break; done.push(x); }
+        if (!done.length) return null;
+        tiers.length = 0; done.forEach(x => tiers.push(x));
+        return { name: skText(b.name, 40) || '—', icon: skEmoji(b.icon), tiers };
+    }).filter(Boolean);
+    if (!branches.length) return null;
+    // ids follow the place in the tree, after the gaps are gone
+    branches.forEach((b, bi) => b.tiers.forEach((tier, ti) => tier.forEach((s, si) => { s.id = `b${bi}t${ti}s${si}`; })));
+    return { branches };
+}
+function myTree() {
+    const all = settings.skillTrees && typeof settings.skillTrees === 'object' ? settings.skillTrees : (settings.skillTrees = {});
+    const t0 = all[skPersonaKey()];
+    if (!t0) return null;
+    if (!t0.__ok) {
+        const n = normalizeTree(t0, 6);
+        if (!n) { delete all[skPersonaKey()]; return null; }
+        Object.defineProperty(n, '__ok', { value: true, enumerable: false });
+        n.name = skText(t0.name, 80); n.at = Number(t0.at) || Date.now(); n.cls = skText(t0.cls, 80);
+        all[skPersonaKey()] = n;
+        return n;
+    }
+    return t0;
+}
+function skillById(id) {
+    const tr = myTree();
+    if (!tr) return null;
+    for (const b of tr.branches) for (const tier of b.tiers) for (const s of tier) if (s.id === id) return s;
+    return null;
+}
+function skState() {
+    if (!state) return null;
+    const s = state.skills && typeof state.skills === 'object' && !Array.isArray(state.skills) ? state.skills : (state.skills = {});
+    if (!Array.isArray(s.taken)) s.taken = [];
+    if (!Array.isArray(s.bar)) s.bar = [];
+    if (!s.cd || typeof s.cd !== 'object' || Array.isArray(s.cd)) s.cd = {};
+    if (!Array.isArray(s.pending)) s.pending = [];
+    s.taken = s.taken.filter(x => typeof x === 'string' && /^b\dt\ds\d$/.test(x)).slice(0, 18);
+    s.bar = s.bar.filter(x => s.taken.includes(x)).slice(0, SKILL_BAR_MAX);
+    s.pending = s.pending.filter(x => typeof x === 'string').slice(-4);
+    s.bonus = skNum(s.bonus, 0, 999, 0);
+    s.comboCd = skNum(s.comboCd, 0, 99, 0);
+    Object.keys(s.cd).forEach(k => { if (!/^b\dt\ds\d$/.test(k) || !(Number(s.cd[k]) > 0)) delete s.cd[k]; });
+    return s;
+}
+// one point to start, one per level after the first, and those won in trials
+function skPoints() {
+    const s = skState();
+    if (!s) return 0;
+    const lvl = settings.levelEnabled ? Math.max(1, Number(state.level) || 1) : 1;
+    return Math.max(0, 1 + (lvl - 1) + s.bonus - s.taken.length);
+}
+// a skill can be taken when the tier below in its branch is taken and its pair is not
+function skStatus(id) {
+    const s = skState();
+    if (!s) return 'locked';
+    if (s.taken.includes(id)) return 'taken';
+    const m = /^b(\d)t(\d)s(\d)$/.exec(id);
+    if (!m) return 'locked';
+    const [, b, t1, k] = m.map(Number);
+    if (s.taken.includes(`b${b}t${t1}s${1 - k}`)) return 'sealed';
+    if (t1 > 0 && !s.taken.some(x => x === `b${b}t${t1 - 1}s0` || x === `b${b}t${t1 - 1}s1`)) return 'locked';
+    return skPoints() > 0 ? 'open' : 'nopoints';
+}
+function takeSkill(id) {
+    syncChat();
+    if (skStatus(id) !== 'open') return false;
+    const s = skState();
+    s.taken.push(id);
+    if (s.bar.length < SKILL_BAR_MAX) s.bar.push(id);
+    saveState(); renderSkillBar(); renderTreeWin(id);
+    return true;
+}
+function skTrialRunning() {
+    try { const m = window.RPG && window.RPG.map; return !!(m && typeof m.trialActive === 'function' && m.trialActive()); } catch (e) { return false; }
+}
+function skActiveNow() { return skillsOn() && (!settings.skillsOnlyTrials || skTrialRunning()); }
+
+/* ---------- using a skill: the code takes the price and does what it can; the story gets one line ---------- */
+function skCostText(c) {
+    const out = [];
+    if (c.mana) out.push(`${c.mana} mana`);
+    if (c.hp) out.push(`${c.hp} health`);
+    if (c.fatigue) out.push(`${c.fatigue} fatigue`);
+    if (c.hunger) out.push(`${c.hunger} hunger`);
+    return out.length ? out.join(', ') : 'nothing';
+}
+/* What a skill really costs with the meters that are on: mana with mana off is paid in fatigue
+   (so a strong skill still costs something), a price on a meter that is off is not taken. */
+function skEff(c) {
+    const e = { mana: 0, hp: c.hp || 0, fatigue: 0, hunger: 0 };
+    if (settings.manaEnabled) e.mana = c.mana || 0;
+    else if (settings.fatigueEnabled) e.fatigue += c.mana || 0;
+    if (settings.fatigueEnabled) e.fatigue += c.fatigue || 0;
+    if (settings.hungerEnabled) e.hunger = c.hunger || 0;
+    e.fatigue = Math.min(100, e.fatigue);
+    return e;
+}
+function skCostLabel(c0) {
+    const c = skEff(c0);
+    const out = [];
+    if (c.mana) out.push(`🔮${c.mana}`);
+    if (c.hp) out.push(`🩸${c.hp}`);
+    if (c.fatigue) out.push(`💤${c.fatigue}`);
+    if (c.hunger) out.push(`🍖${c.hunger}`);
+    return out.join(' ');
+}
+function skFill(tpl, vars) { let s = String(tpl); for (const k in vars) s = s.split('{' + k + '}').join(String(vars[k])); return s; }
+function skPower(sk) { return sk.effect.power * 6 + Math.floor((settings.levelEnabled ? state.level : 1) / 2); }
+function skApplyEffect(sk, mult) {
+    const p = Math.round(skPower(sk) * (mult || 1));
+    const k = sk.effect.kind;
+    if (k === 'damage' && state.enemies.length) {
+        const e = state.enemies.reduce((a, b) => (a.hp <= b.hp ? a : b));
+        e.hp = Math.max(0, e.hp - p);
+        if (e.hp <= 0) { gainKillXp(e); state.enemies = state.enemies.filter(x => x.id !== e.id); return t('sk_fx_down', { name: e.name }); }
+        return t('sk_fx_hit', { name: e.name, n: p });
+    }
+    if (k === 'heal') { state.hp = Math.min(state.maxHp, state.hp + p); return t('sk_fx_heal', { n: p }); }
+    if (k === 'shield' || k === 'summon') {
+        addBuff({ name: sk.name, effect: sk.desc, kind: 'buff', duration: Math.max(2, sk.effect.power + 1) });
+        return t('sk_fx_buff', { name: sk.name });
+    }
+    return '';
+}
+function skPay(c0) {
+    // a price that cannot be paid stops the skill: mana and fatigue are counted only when they are on
+    const c = skEff(c0);
+    if (c.mana && settings.manaEnabled && (Number(state.mana) || 0) < c.mana) return t('sk_no_mana');
+    if (c.fatigue && settings.fatigueEnabled && (Number(state.fatigue) || 0) + c.fatigue > 100) return t('sk_too_tired');
+    if (c.mana && settings.manaEnabled) state.mana = Math.max(0, state.mana - c.mana);
+    if (c.fatigue && settings.fatigueEnabled) state.fatigue = Math.min(100, (state.fatigue || 0) + c.fatigue);
+    if (c.hunger && settings.hungerEnabled) state.hunger = Math.max(0, (state.hunger || 0) - c.hunger);
+    if (c.hp) { state.hp = state.hp - c.hp; clampHp(); }   // blood: the angel is called the usual way when it runs out
+    return '';
+}
+// the skill in your own message, as your character's action: you send it with the rest
+function skToBox(text) {
+    try {
+        const box = document.getElementById('send_textarea');
+        if (!box) return;
+        const cur = String(box.value || '').replace(/\s+$/, '');
+        box.value = cur ? cur + '\n' + text : text;
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+        box.focus();
+        try { box.setSelectionRange(box.value.length, box.value.length); } catch (e) { }
+    } catch (e) { }
+}
+function useSkill(id, opts) {
+    syncChat();
+    if (!state || !skActiveNow()) { toastr.info(t(settings.skillsOnlyTrials ? 'sk_only_trials' : 'sk_off')); return; }
+    const s = skState();
+    const sk = skillById(id);
+    if (!sk || !s.taken.includes(id)) return;
+    if (s.cd[id] > 0) { toastr.info(t('sk_cooldown', { n: s.cd[id] })); return false; }
+    const err = skPay(sk.cost);
+    if (err) { toastr.warning(err); return false; }
+    if (sk.side) addBuff({ name: sk.side.name, effect: '', kind: 'debuff', duration: sk.side.turns });
+    const onOther = !!(opts && opts.target);
+    const fx = onOther ? t('sk_fx_on', { name: opts.target }) : skApplyEffect(sk, 1);
+    // the Map's party keeps the others' health: a heal on them reaches it
+    if (onOther) { try { window.dispatchEvent(new CustomEvent('rpg:vitals-skill', { detail: { target: opts.target, kind: sk.effect.kind, amount: skPower(sk) } })); } catch (e) { } }
+    if (sk.cooldown) s.cd[id] = sk.cooldown;
+    s.queued = (Array.isArray(s.queued) ? s.queued : []).concat(id).slice(-4);
+    const line = skFill(String(settings.skillUseLine || '').trim() ? settings.skillUseLine : SKILL_USE_DEFAULT, {
+        NAME: playerName(), SKILL: sk.name, DESC: sk.desc || sk.name, COST: skCostText(skEff(sk.cost)),
+        SIDE: sk.side ? ` Side effect: ${sk.side.name} for ${sk.side.turns} turns.` : ''
+    });
+    s.pending.push(line);
+    saveState(); renderPanel(); buildInjection(); renderSkillBar();
+    try { window.dispatchEvent(new CustomEvent('rpg:vitals-enemies', { detail: { skill: true } })); } catch (e) { }
+    if (!(opts && opts.quiet)) skToBox(onOther
+        ? t('sk_box_on', { name: playerName(), skill: sk.name, target: opts.target, desc: sk.desc || '' }).replace(/:\s*\*$/, '.*')
+        : t('sk_box_use', { name: playerName(), skill: sk.name, desc: sk.desc || '' }).replace(/:\s*\*$/, '.*'));
+    toastr.success(`${sk.name}${fx ? ' — ' + fx : ''}${opts && opts.quiet ? '' : '. ' + t('sk_next_reply')}`, t('sk_used'));
+    return true;
+}
+
+/* the joint move: whoever is with you; Trust in Bonds is the chance */
+function skPartners() {
+    const out = [];
+    try {
+        const m = window.RPG && window.RPG.map;
+        if (m && typeof m.companions === 'function') (m.companions() || []).forEach(n => { if (n && !out.includes(n)) out.push(String(n)); });
+    } catch (e) { }
+    if (!out.length) {
+        const ctx = getContext();
+        if (ctx.groupId && Array.isArray(ctx.groups)) {
+            const g = ctx.groups.find(x => x && x.id === ctx.groupId);
+            (g && g.members || []).forEach(av => { const ch = (ctx.characters || []).find(c => c.avatar === av); if (ch && !out.includes(ch.name)) out.push(ch.name); });
+        } else if (ctx.name2) out.push(ctx.name2);
+    }
+    return out.slice(0, 6);
+}
+function skTrust(name) {
+    try {
+        const b = window.RPG && window.RPG.bonds;
+        if (b && typeof b.trust === 'function') { const v = b.trust(name); if (Number.isFinite(v)) return Math.max(0, Math.min(100, v)); }
+    } catch (e) { }
+    return null;
+}
+function useCombo(partner, id) {
+    syncChat();
+    if (!state || !skActiveNow()) { toastr.info(t(settings.skillsOnlyTrials ? 'sk_only_trials' : 'sk_off')); return; }
+    const s = skState();
+    const sk = skillById(id);
+    if (!sk || !s.taken.includes(id) || !partner) return;
+    if (s.comboCd > 0) { toastr.info(t('sk_cooldown', { n: s.comboCd })); return; }
+    const err = skPay(sk.cost);
+    if (err) { toastr.warning(err); return; }
+    const trust = skTrust(partner);
+    const chance = trust == null ? 50 : Math.max(10, Math.min(95, trust));
+    const roll = Math.floor(Math.random() * 100) + 1;
+    const hit = roll <= chance;
+    const fx = hit ? skApplyEffect(sk, 2) : '';
+    s.comboCd = 5;
+    s.comboQueued = true;
+    const line = skFill(String(settings.skillComboLine || '').trim() ? settings.skillComboLine : SKILL_COMBO_DEFAULT, {
+        NAME: playerName(), PARTNER: partner, SKILL: sk.name, RESULT: hit ? SKILL_COMBO_OK : SKILL_COMBO_FAIL
+    });
+    s.pending.push(line);
+    saveState(); renderPanel(); buildInjection(); renderSkillBar();
+    try { window.dispatchEvent(new CustomEvent('rpg:vitals-enemies', { detail: { skill: true } })); } catch (e) { }
+    skToBox(t('sk_box_combo', { name: playerName(), partner, skill: sk.name }));
+    const msg = t(hit ? 'sk_combo_ok' : 'sk_combo_fail', { name: partner, roll, chance });
+    (hit ? toastr.success : toastr.warning)(`${msg}${fx ? ' — ' + fx : ''}`, sk.name);
+}
+
+// one reply later: cooldowns step down, the told lines are spent
+function skillTick() {
+    const s = state && state.skills ? skState() : null;
+    if (!s) return;
+    Object.keys(s.cd).forEach(k => { s.cd[k] = s.cd[k] - 1; if (s.cd[k] <= 0) delete s.cd[k]; });
+    if (s.comboCd > 0) s.comboCd--;
+    s.pending = [];
+    s.queued = [];
+    s.comboQueued = false;
+}
+function skillInjection() {
+    let text = '';
+    const s = skillsOn() && state && state.skills ? skState() : null;
+    if (s && s.pending.length) text = '\n' + s.pending.join('\n') + '\n';
+    try { setExtensionPrompt(PROMPT_KEY_SKILL, text, 1, skNum(settings.skillDepth, 0, 50, 2), false, extension_prompt_roles.SYSTEM); } catch (e) { }
+}
+
+/* ---------- the class: suggested by the model for this world, or written by hand ---------- */
+let treeChoosing = false;   // the class screen is open over an existing tree ("grow anew")
+let classBusy = false;
+let skClassFresh = false;   // the tiles come in one by one only right after they arrive
+function skClassBox() {
+    const all = settings.skillClasses && typeof settings.skillClasses === 'object' && !Array.isArray(settings.skillClasses) ? settings.skillClasses : (settings.skillClasses = {});
+    const k = skPersonaKey();
+    const b = all[k] && typeof all[k] === 'object' ? all[k] : (all[k] = {});
+    b.list = (Array.isArray(b.list) ? b.list : []).map(x => x && typeof x === 'object' ? { name: skText(x.name, 60), desc: skText(x.desc, 200), icon: x.icon ? skEmoji(x.icon) : '' } : null).filter(x => x && x.name).slice(0, 8);
+    b.chosen = b.chosen && typeof b.chosen === 'object' && skText(b.chosen.name, 60) ? { name: skText(b.chosen.name, 60), desc: skText(b.chosen.desc, 200) } : null;
+    return b;
+}
+function skChosen() { return skClassBox().chosen; }
+// the world, as the character card tells it (several cards in a group)
+async function skWorld() {
+    const parts = [];
+    if (settings.skillScanCard) { const c = skWorldCard(); if (c) parts.push(c); }
+    if (settings.skillScanLore) { try { const l = await skWorldLore(); if (l) parts.push(l); } catch (e) { console.warn('[RPG Vitals] lorebook', e); } }
+    return parts.join('\n\n');
+}
+/* The lorebooks of this chat: the character's own, the chat's, and the ones switched on for every chat.
+   Only enabled entries, each as "title: text", within a budget. */
+async function skWorldLore() {
+    const ctx = getContext();
+    if (typeof ctx.loadWorldInfo !== 'function') return '';
+    const names = new Set();
+    const addCh = ch => { const w = ch && ch.data && ch.data.extensions && ch.data.extensions.world; if (w) names.add(String(w)); };
+    if (ctx.groupId && Array.isArray(ctx.groups)) {
+        const g = ctx.groups.find(x => x && x.id === ctx.groupId);
+        (g && g.members || []).forEach(av => addCh((ctx.characters || []).find(c => c.avatar === av)));
+    } else if (ctx.characterId !== undefined && ctx.characters) addCh(ctx.characters[ctx.characterId]);
+    try { const cw = ctx.chatMetadata && ctx.chatMetadata.world_info; if (cw) names.add(String(cw)); } catch (e) { }
+    try { (Array.isArray(selected_world_info) ? selected_world_info : []).forEach(n => n && names.add(String(n))); } catch (e) { }
+    const out = [];
+    let left = 12000;
+    for (const n of names) {
+        if (left <= 0) break;
+        let data = null;
+        try { data = await ctx.loadWorldInfo(n); } catch (e) { data = null; }
+        const entries = data && data.entries && typeof data.entries === 'object' ? Object.values(data.entries) : [];
+        for (const e of entries) {
+            if (!e || e.disable || !String(e.content || '').trim()) continue;
+            const title = String(e.comment || (Array.isArray(e.key) ? e.key[0] : '') || '').trim();
+            const line = `${title ? title + ': ' : ''}${String(e.content).replace(/\s+/g, ' ').trim()}`.slice(0, 1500);
+            out.push(line); left -= line.length;
+            if (left <= 0) break;
+        }
+    }
+    return out.length ? `The world (from the lorebook):\n${out.join('\n').slice(0, 12000)}` : '';
+}
+function skWorldCard() {
+    try {
+        const ctx = getContext();
+        const pick = ch => ch ? [ch.description, ch.scenario].filter(Boolean).join('\n') : '';
+        let text = '';
+        if (ctx.groupId && Array.isArray(ctx.groups)) {
+            const g = ctx.groups.find(x => x && x.id === ctx.groupId);
+            text = (g && g.members || []).map(av => (ctx.characters || []).find(c => c.avatar === av)).filter(Boolean).map(ch => `${ch.name}: ${pick(ch)}`).join('\n\n');
+        } else if (ctx.characterId !== undefined && ctx.characters && ctx.characters[ctx.characterId]) text = pick(ctx.characters[ctx.characterId]);
+        text = String(text || '').trim();
+        return text ? `The world (from the character card):\n${text.slice(0, 12000)}` : '';
+    } catch (e) { return ''; }
+}
+async function suggestClasses() {
+    if (classBusy) return;
+    if (!apiKey()) { toastr.error(t('sk_no_key')); return; }
+    const key = skPersonaKey();
+    classBusy = true; renderTreeWin();
+    try {
+        const sys = skFill(String(settings.skillClassPrompt || '').trim() ? settings.skillClassPrompt : SKILL_CLASS_DEFAULT, {
+            NAME: playerName(), SOURCE: skSource(), WORLD: await skWorld(), N: 6, LANG: `Write the names and descriptions in ${genLang()}.`
+        }).replace(/\n{3,}/g, '\n\n');
+        let list = null;
+        for (let i = 0; i < 2 && !list; i++) {
+            const raw = await callAI(sys, i ? 'Suggest the classes. Reply with the JSON object only.' : 'Suggest the classes.', { maxTokens: 1500, lenient: true, once: true });
+            const arr = Array.isArray(raw) ? raw : (raw && (raw.classes || raw.class_list));
+            if (Array.isArray(arr)) list = arr.map(x => typeof x === 'string' ? { name: skText(x, 60), desc: '', icon: '' } : { name: skText(x && x.name, 60), desc: skText(x && (x.desc || x.description), 200), icon: x && x.icon ? skEmoji(x.icon) : '' }).filter(x => x.name).slice(0, 8);
+            if (list && !list.length) list = null;
+        }
+        if (skPersonaKey() !== key) return;
+        if (!list) { toastr.error(t('sk_class_fail')); return; }
+        const b = skClassBox(); b.list = list; skClassFresh = true; saveSettings();
+    } catch (e) {
+        console.warn('[RPG Vitals] classes', e);
+        toastr.error(t('sk_class_fail'));
+    } finally { classBusy = false; renderTreeWin(); }
+}
+function skClassHtml() {
+    const b = skClassBox();
+    const ch = b.chosen;
+    const fresh = skClassFresh; skClassFresh = false;
+    return `<div class="rpg-sk-class${fresh ? ' fresh' : ''}">
+        <div class="rpg-sk-class-h"><span>${escapeHtml(t('sk_class_h'))}</span></div>
+        ${!b.list.length && classBusy ? `<div class="rpg-sk-class-loading"><i class="fa-solid fa-spinner fa-spin"></i> ${escapeHtml(t('sk_class_busy'))}</div>` : ''}
+        ${b.list.length ? `<div class="rpg-sk-class-list">${b.list.map((c, i) => `<button type="button" class="rpg-sk-cls${ch && ch.name === c.name ? ' on' : ''}" data-cls="${i}" aria-pressed="${ch && ch.name === c.name ? 'true' : 'false'}" style="--d:${i * 45}ms"><span class="rpg-sk-cls-ic" aria-hidden="true">${escapeHtml(c.icon || '✦')}</span><span class="rpg-sk-cls-t"><b>${escapeHtml(c.name)}</b>${c.desc ? `<small>${escapeHtml(c.desc)}</small>` : ''}</span></button>`).join('')}</div>` : ''}
+        <div class="rpg-sk-class-row">
+            <input type="text" class="rpg-sk-own-in" maxlength="80" value="${escapeHtml(ch && !b.list.some(c => c.name === ch.name) ? ch.name : '')}" placeholder="${escapeHtml(t('sk_class_own_ph'))}" aria-label="${escapeHtml(t('sk_class_own'))}">
+            <button type="button" class="rpg-sk-roll" data-suggest="1" ${classBusy ? 'disabled' : ''} title="${escapeHtml(b.list.length ? t('sk_class_more') : t('sk_class_suggest'))}">${classBusy ? `<i class="fa-solid fa-spinner fa-spin"></i> ${escapeHtml(t('sk_class_busy'))}` : `✨ ${escapeHtml(b.list.length ? t('sk_class_more') : t('sk_class_suggest'))}`}</button>
+        </div>
+
+    </div>`;
+}
+
+/* ---------- making the tree ---------- */
+let treeBusy = false;
+function skSource() {
+    let desc = '';
+    try { desc = String((power_user && power_user.persona_description) || '').trim(); } catch (e) { desc = ''; }
+    if (desc) return `Who they are:\n${desc.slice(0, 20000)}`;
+    try {
+        const d = window.RPG && window.RPG.diary;
+        const sum = d && d.available && d.isEnabled && d.isEnabled() && d.getSummary ? String(d.getSummary() || '').trim() : '';
+        if (sum) return `What the story knows of them:\n${sum.slice(0, 20000)}`;
+    } catch (e) { }
+    const chat = getContext().chat || [];
+    const tail = chat.slice(-6).filter(m => m && !m.is_system).map(m => `${m.name}: ${String(m.mes || '').replace(/\s+/g, ' ').slice(0, 800)}`).join('\n');
+    return `Little is written about them; draw on the latest messages:\n${tail || '—'}`;
+}
+async function makeTree() {
+    if (treeBusy) return;
+    if (!apiKey()) { toastr.error(t('sk_no_key')); return; }
+    const key = skPersonaKey();
+    treeBusy = true;
+    const btn = document.querySelector('#rpg-sk-win .rpg-sk-main[data-make]');
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${escapeHtml(t('sk_making'))}`; }
+    let why = '';
+    try {
+        const n = skNum(settings.skillBranches, 2, 6, 2);
+        const sys = skFill(String(settings.skillPrompt || '').trim() ? settings.skillPrompt : SKILL_TREE_DEFAULT, {
+            NAME: playerName(), SOURCE: skSource(), BRANCHES: n, LANG: `Write the names and descriptions in ${genLang()}.`, WORLD: await skWorld(),
+            CLASS: settings.skillClassesOn && skChosen() ? `Class chosen by the player: ${skChosen().name}${skChosen().desc ? ' (' + skChosen().desc + ')' : ''}. Build every branch around this class.` : ''
+        }).replace(/\n{3,}/g, '\n\n');
+        let tree = null, part = null, partO = null;
+        const full = x => x.branches.length >= n && x.branches.every(b => b.tiers.length >= 3);
+        const count = x => x ? x.branches.reduce((a, b) => a + b.tiers.length * 2, 0) : 0;
+        for (let i = 0; i < 2 && !tree; i++) {
+            const o = { maxTokens: 2000 * n, lenient: true, once: true };
+            let raw = null;
+            try { raw = await callAI(sys, i ? 'Write the skill tree. Reply with the JSON object only.' : 'Write the skill tree.', o); }
+            catch (e) {
+                why = String(e && e.message || e).slice(0, 120);
+                // a local server may refuse the requested length: once more without it
+                if (/HTTP 4\d\d/.test(why) && i === 0) { try { const o2 = { lenient: true, once: true }; raw = await callAI(sys, 'Write the skill tree.', o2); o.raw = o2.raw; why = ''; } catch (e2) { why = String(e2 && e2.message || e2).slice(0, 120); } }
+                if (!raw) break;
+            }
+            tree = normalizeTree(raw, n);
+            if (!tree) { why = (o.raw ? t('sk_fail_shape') : t('sk_fail_empty')) + skStopWhy(o); console.warn('[RPG Vitals] the tree answer could not be read:', { finish: o.finish, usage: o.usage, answer: String(o.raw || '').slice(0, 3000) }); }
+            else if (!full(tree)) {
+                // the model stopped before the tree was whole: asked once more, the fuller one is kept
+                console.warn('[RPG Vitals] the tree came back unfinished:', { skills: count(tree), of: n * 6, finish: o.finish, usage: o.usage, answer: String(o.raw || '').slice(0, 12000) });
+                if (count(tree) > count(part)) { part = tree; partO = o; }
+                tree = null;
+            }
+        }
+        let partial = false;
+        if (!tree && part) { tree = part; partial = true; toastr.warning(t('sk_part', { n: count(part), all: n * 6, why: skStopWhy(partO) }), '', { timeOut: 12000 }); }
+        if (!tree) { toastr.error(`${t('sk_make_fail')}${why ? ' — ' + why : ''}`); return; }
+        if (skPersonaKey() !== key) return;   // the persona changed while the model thought
+        tree.name = playerName(); tree.at = Date.now(); tree.cls = settings.skillClassesOn && skChosen() ? skChosen().name : '';
+        Object.defineProperty(tree, '__ok', { value: true, enumerable: false });
+        settings.skillTrees[key] = tree;
+        saveSettings();
+        // a new tree: the old choices of this chat no longer point anywhere
+        syncChat();
+        const s = skState(); if (s) { s.taken = []; s.bar = []; s.cd = {}; saveState(); }
+        treeChoosing = false;
+        if (!partial) toastr.success(t('sk_made'));
+    } catch (e) {
+        console.warn('[RPG Vitals] tree', e);
+        toastr.error(`${t('sk_make_fail')} — ${String(e && e.message || e).slice(0, 120)}`);
+    } finally {
+        treeBusy = false;
+        renderTreeWin(); renderSkillBar();
+    }
+}
+
+/* ---------- the bar in the message box ---------- */
+function renderSkillBar() {
+    let bar = document.getElementById('rpg-vit-skillbar');
+    const s = state ? skState() : null;
+    const tree = myTree();
+    const show = !!(skActiveNow() && s && tree && (s.bar.length || s.taken.length));
+    if (!show) { if (bar) bar.remove(); hideSkTip(); return; }
+    if (!bar) {
+        // its own place in the message box, right after the ☰ (not inside it: that block sizes its children)
+        const left = document.getElementById('leftSendForm');
+        const host = left ? left.parentElement : document.getElementById('send_form');
+        if (!host) return;
+        bar = document.createElement('div');
+        bar.id = 'rpg-vit-skillbar';
+        bar.setAttribute('role', 'toolbar');
+        if (left) left.after(bar); else host.appendChild(bar);
+        bar.addEventListener('click', onSkillBarClick);
+        bar.addEventListener('pointerover', e => { const b = e.target.closest('[data-sk]'); if (b) showSkTip(b, b.dataset.sk); });
+        bar.addEventListener('pointerout', e => { if (!e.relatedTarget || !bar.contains(e.relatedTarget)) hideSkTip(); });
+        bar.addEventListener('focusin', e => { const b = e.target.closest('[data-sk]'); if (b) showSkTip(b, b.dataset.sk); });
+        bar.addEventListener('focusout', hideSkTip);
+    }
+    bar.setAttribute('aria-label', t('sk_bar'));
+    const btn = id => {
+        const sk = skillById(id);
+        if (!sk) return '';
+        const cd = s.cd[id] || 0;
+        const q = Array.isArray(s.queued) && s.queued.includes(id);
+        const price = skCostLabel(sk.cost);
+        return `<button type="button" class="rpg-sk-btn named${cd ? ' cd' : ''}${q ? ' queued' : ''}" data-sk="${escapeHtml(id)}" aria-label="${escapeHtml(sk.name + (cd ? ' · ' + t('sk_cooldown', { n: cd }) : ''))}">
+            <span class="rpg-sk-ic" aria-hidden="true">${SKILL_KIND_ICON[sk.effect.kind] || '✦'}</span><span class="rpg-sk-nm">${escapeHtml(sk.name)}</span>${cd ? `<small class="rpg-sk-wait">⏳${cd}</small>` : price ? `<small class="rpg-sk-pr">${escapeHtml(price)}</small>` : ''}</button>`;
+    };
+    const partners = skPartners();
+    const html = `<span class="rpg-sk-row">${s.bar.map(btn).join('')}</span>`
+        + (partners.length && s.taken.length ? `<button type="button" class="rpg-sk-btn combo${s.comboCd ? ' cd' : ''}${s.comboQueued ? ' queued' : ''}" data-combo="1" aria-label="${escapeHtml(t('sk_combo') + (s.comboCd ? ' · ' + t('sk_cooldown', { n: s.comboCd }) : ''))}" title="${escapeHtml(t('sk_combo'))}"><span class="rpg-sk-ic" aria-hidden="true">⚡</span>${s.comboCd ? `<span class="rpg-sk-cd">${s.comboCd}</span>` : ''}</button>` : '')
+        + `<button type="button" class="rpg-sk-btn tree" data-tree="1" title="${escapeHtml(t('sk_tree'))}" aria-label="${escapeHtml(t('sk_tree'))}"><span class="rpg-sk-ic" aria-hidden="true">🌿</span>${skPoints() ? `<span class="rpg-sk-pt">${skPoints()}</span>` : ''}</button>`;
+    if (bar.__html !== html) { bar.innerHTML = html; bar.__html = html; }   // nothing changed: nothing redrawn
+}
+function onSkillBarClick(e) {
+    const b = e.target.closest('button');
+    if (!b) return;
+    e.preventDefault();
+    if (b.dataset.tree) { openTreeWin(); return; }
+    if (b.dataset.combo) { openComboPick(b); return; }
+    if (b.dataset.sk) {
+        hideSkTip();
+        const sk = skillById(b.dataset.sk);
+        // healing or a shield, with someone at your side: on whom
+        if (sk && (sk.effect.kind === 'heal' || sk.effect.kind === 'shield') && skPartners().length) { openTargetPick(b, sk); return; }
+        useSkill(b.dataset.sk);
+    }
+}
+function openTargetPick(anchor, sk) {
+    closeComboPick();
+    const p = document.createElement('div');
+    p.id = 'rpg-sk-combo';
+    p.className = 'rpg-sk-tip combo target';
+    p.setAttribute('role', 'dialog');
+    p.setAttribute('aria-label', t('sk_on_whom'));
+    const me = playerName();
+    const who = [me].concat(skPartners());
+    const ctx = getContext();
+    const pic = (n, i) => {
+        let src = '';
+        if (i === 0) { try { const av = String(user_avatar || ''); if (/^[\w .()\-\[\]]+\.(png|webp|jpe?g)$/i.test(av)) src = `/thumbnail?type=persona&file=${encodeURIComponent(av)}`; } catch (e) { } }
+        else { const ch = (ctx.characters || []).find(c => c && c.name === n); if (ch && ch.avatar && /^[\w .()\-\[\]]+\.(png|webp|jpe?g)$/i.test(ch.avatar)) src = `/thumbnail?type=avatar&file=${encodeURIComponent(ch.avatar)}`; }
+        return src ? `<img src="${escapeHtml(src)}" alt="" draggable="false">` : `<i>${escapeHtml(String(n).trim().charAt(0).toUpperCase())}</i>`;
+    };
+    p.innerHTML = `<div class="rpg-sk-combo-h"><span aria-hidden="true">${SKILL_KIND_ICON[sk.effect.kind]}</span> ${escapeHtml(sk.name)} · ${escapeHtml(t('sk_on_whom'))}</div>
+        <div class="rpg-sk-faces">${who.map((n, i) => `<button type="button" class="rpg-sk-face tgt" data-tgt="${i}" aria-label="${escapeHtml(i === 0 ? t('sk_self') : n)}"><span class="rpg-sk-face-ring" aria-hidden="true">${pic(n, i)}</span><span class="rpg-sk-face-nm">${escapeHtml(i === 0 ? t('sk_self') : n)}</span></button>`).join('')}</div>`;
+    p.addEventListener('click', e => {
+        const b = e.target.closest('[data-tgt]');
+        if (!b) return;
+        const i = Number(b.dataset.tgt);
+        closeComboPick();
+        useSkill(sk.id, i === 0 ? null : { target: who[i] });
+    });
+    document.body.appendChild(p);
+    skPlace(p, anchor);
+    setTimeout(() => document.addEventListener('pointerdown', comboOutside, true), 0);
+}
+function closeComboPick() { const p = document.getElementById('rpg-sk-combo'); if (p) p.remove(); document.removeEventListener('pointerdown', comboOutside, true); }
+function comboOutside(e) { const p = document.getElementById('rpg-sk-combo'); if (p && !p.contains(e.target) && !e.target.closest('[data-combo]')) closeComboPick(); }
+function openComboPick(anchor) {
+    if (document.getElementById('rpg-sk-combo')) { closeComboPick(); return; }
+    const s = skState();
+    if (!s) return;
+    const partners = skPartners();
+    const skills = s.taken.map(skillById).filter(Boolean);
+    let who = partners[0];
+    const p = document.createElement('div');
+    p.id = 'rpg-sk-combo';
+    p.className = 'rpg-sk-tip combo';
+    p.setAttribute('role', 'dialog');
+    p.setAttribute('aria-label', t('sk_combo'));
+    const ctx = getContext();
+    const face = n => {
+        const ch = (ctx.characters || []).find(c => c && c.name === n);
+        const av = ch && ch.avatar && /^[\w .()\-\[\]]+\.(png|webp|jpe?g)$/i.test(ch.avatar) ? `/thumbnail?type=avatar&file=${encodeURIComponent(ch.avatar)}` : '';
+        const tr = skTrust(n);
+        const pct = tr == null ? 50 : Math.round(tr);
+        return `<button type="button" class="rpg-sk-face${n === who ? ' on' : ''}" data-who="${escapeHtml(n)}" title="${escapeHtml(n + ' · ' + (tr == null ? t('sk_trust_none') : t('sk_trust', { n: pct })))}" style="--p:${pct}">
+            <span class="rpg-sk-face-ring" aria-hidden="true">${av ? `<img src="${escapeHtml(av)}" alt="" draggable="false">` : `<i>${escapeHtml(String(n).trim().charAt(0).toUpperCase())}</i>`}</span>
+            <span class="rpg-sk-face-pct">${pct}%</span></button>`;
+    };
+    const draw = () => {
+        p.innerHTML = `<div class="rpg-sk-combo-h"><span aria-hidden="true">⚡</span> ${escapeHtml(t('sk_combo'))}${s.comboCd ? ` <em>${escapeHtml(t('sk_cooldown', { n: s.comboCd }))}</em>` : ''}</div>
+            <div class="rpg-sk-faces" role="radiogroup" aria-label="${escapeHtml(t('sk_with'))}">${partners.map(face).join('')}</div>
+            <div class="rpg-sk-icons">${skills.map(sk => `<button type="button" class="rpg-sk-btn" data-use="${escapeHtml(sk.id)}" title="${escapeHtml(sk.name + (skCostLabel(sk.cost) ? ' · ' + skCostLabel(sk.cost) : ''))}" aria-label="${escapeHtml(sk.name)}"><span class="rpg-sk-ic" aria-hidden="true">${SKILL_KIND_ICON[sk.effect.kind]}</span></button>`).join('')}</div>`;
+    };
+    draw();
+    p.addEventListener('click', e => {
+        const w = e.target.closest('[data-who]');
+        if (w) { who = w.dataset.who; draw(); return; }
+        const u = e.target.closest('[data-use]');
+        if (u) { closeComboPick(); useCombo(who, u.dataset.use); }
+    });
+    document.body.appendChild(p);
+    skPlace(p, anchor);
+    setTimeout(() => document.addEventListener('pointerdown', comboOutside, true), 0);
+}
+function skPlace(el, anchor) {
+    const r = anchor.getBoundingClientRect();
+    const w = el.offsetWidth, h = el.offsetHeight;
+    let x = r.left + r.width / 2 - w / 2, y = r.top - h - 10;
+    if (y < 8) y = r.bottom + 10;
+    x = Math.max(8, Math.min(innerWidth - w - 8, x));
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+}
+function skDetailHtml(sk, st, pinned, s) {
+    const acts = [];
+    if (st === 'open') acts.push(`<button type="button" class="rpg-sk-main sm" data-take="${escapeHtml(sk.id)}">${escapeHtml(t('sk_take'))}</button>`);
+    if (st === 'taken') acts.push(`<button type="button" class="rpg-sk-pinb${pinned ? ' on' : ''}" data-pin="${escapeHtml(sk.id)}" aria-pressed="${pinned ? 'true' : 'false'}" title="${escapeHtml(pinned ? t('sk_unpin') : t('sk_pin'))}" ${!pinned && s.bar.length >= SKILL_BAR_MAX ? 'disabled' : ''}>📌 ${escapeHtml(pinned ? t('sk_on_bar') : t('sk_pin'))}</button>`);
+    return `<div class="rpg-sk-detail">${skTipHtml(sk, st)}${acts.length ? `<div class="rpg-sk-acts">${acts.join('')}</div>` : ''}</div>`;
+}
+// a skill picked in the tree: only the mark and the little card change
+function treeSelect(id) {
+    const w = document.getElementById('rpg-sk-win');
+    if (!w || !w.querySelector('.rpg-sk-stage')) { renderTreeWin(); return; }
+    treeSel = id;
+    w.querySelectorAll('.rpg-sk-node.sel').forEach(n => n.classList.remove('sel'));
+    const old = w.querySelector('.rpg-sk-detail');
+    if (!id) { if (old) old.remove(); return; }
+    const node = w.querySelector(`.rpg-sk-node[data-node="${CSS.escape(id)}"]`);
+    if (node) node.classList.add('sel');
+    const sk = skillById(id), s = skState();
+    if (!sk || !s) return;
+    const html = skDetailHtml(sk, skStatus(id), s.bar.includes(id), s);
+    if (old) { old.outerHTML = html; const n = w.querySelector('.rpg-sk-detail'); if (n) n.classList.add('still'); }
+    else w.querySelector('.rpg-sk-stage').insertAdjacentHTML('afterend', html);
+}
+function skTipHtml(sk, status) {
+    const st = { taken: t('sk_st_taken'), sealed: t('sk_st_sealed'), locked: t('sk_st_locked'), open: t('sk_st_open'), nopoints: t('sk_st_nopoints') }[status] || '';
+    const s = skState();
+    return `<div class="rpg-sk-tip-h"><span aria-hidden="true">${SKILL_KIND_ICON[sk.effect.kind]}</span> ${escapeHtml(sk.name)}</div>
+        ${sk.desc ? `<div class="rpg-sk-tip-d">${escapeHtml(sk.desc)}</div>` : ''}
+        <div class="rpg-sk-tip-g">
+            <span>${escapeHtml(t('sk_k_' + sk.effect.kind))} · ${'◆'.repeat(sk.effect.power)}</span>
+            ${skCostLabel(sk.cost) ? `<span>${escapeHtml(t('sk_price'))}: ${escapeHtml(skCostLabel(sk.cost))}</span>` : ''}
+            ${sk.side ? `<span class="bad">${escapeHtml(t('sk_side', { name: sk.side.name, n: sk.side.turns }))}</span>` : ''}
+            ${sk.cooldown ? `<span>${escapeHtml(t('sk_cd_every', { n: sk.cooldown }))}</span>` : ''}
+        </div>
+        ${status ? `<div class="rpg-sk-tip-m ${status}">${escapeHtml(st)}${s && s.cd[sk.id] ? ' · ' + escapeHtml(t('sk_cooldown', { n: s.cd[sk.id] })) : ''}</div>` : ''}`;
+}
+function showSkTip(anchor, id) {
+    const sk = skillById(id);
+    if (!sk) return;
+    let tip = document.getElementById('rpg-sk-tip');
+    if (!tip) { tip = document.createElement('div'); tip.id = 'rpg-sk-tip'; tip.className = 'rpg-sk-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+    tip.innerHTML = skTipHtml(sk, '');
+    skPlace(tip, anchor);
+    tip.classList.add('show');
+}
+function hideSkTip() { const tip = document.getElementById('rpg-sk-tip'); if (tip) tip.remove(); }
+
+/* ---------- the tree window: carried by hand, turned by the wheel, dragged around inside ---------- */
+let treeView = { z: 1, x: 0, y: 0 };
+let treeSel = null;
+// your own class, typed by hand
+document.addEventListener('change', e => {
+    const inp = e.target && e.target.closest ? e.target.closest('#rpg-sk-win .rpg-sk-own-in') : null;
+    if (!inp) return;
+    const v = skText(inp.value, 80);
+    const box = skClassBox();
+    box.chosen = v ? { name: v, desc: '' } : (box.chosen && box.list.some(c => c.name === box.chosen.name) ? box.chosen : null);
+    saveSettings();
+    document.querySelectorAll('#rpg-sk-win .rpg-sk-cls').forEach(b => { const c = box.list[Number(b.dataset.cls)]; const on = !!(c && box.chosen && box.chosen.name === c.name); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+});
+document.addEventListener('keydown', e => { if (e.target && e.target.closest && e.target.closest('#rpg-sk-win .rpg-sk-own-in')) { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); } }, true);
+function closeTreeWin() {
+    treeChoosing = false;
+    const w = document.getElementById('rpg-sk-win');
+    if (w) { w.classList.remove('show'); setTimeout(() => { const n = document.getElementById('rpg-sk-win'); if (n && !n.classList.contains('show')) n.remove(); }, 250); }
+    document.removeEventListener('keydown', treeKey, true);
+    treeSel = null;
+}
+function treeKey(e) { if (e.key === 'Escape' && document.getElementById('rpg-sk-win')) { e.stopPropagation(); if (treeSel) { treeSel = null; renderTreeWin(); } else closeTreeWin(); } }
+function openTreeWin() {
+    syncChat();
+    if (!skillsOn()) { toastr.info(t('sk_off')); return; }
+    let w = document.getElementById('rpg-sk-win');
+    if (w && w.classList.contains('show')) { closeTreeWin(); return; }
+    treeView = { z: innerWidth < 640 ? 0.8 : 1, x: 0, y: 0 };
+    treeSel = null;
+    renderTreeWin(undefined, true);
+    // no tree and no classes yet: the classes for this world are asked for at once, not hidden behind a button
+    try { if (!myTree() && settings.skillClassesOn && !skClassBox().list.length && apiKey() && !classBusy) suggestClasses(); } catch (e) { }
+    w = document.getElementById('rpg-sk-win');
+    treeView.z = treeFitZ(); treeApply();
+    requestAnimationFrame(() => w && w.classList.add('show'));
+    document.addEventListener('keydown', treeKey, true);
+}
+const TREE_COL = 210, TREE_ROW = 112, TREE_NODE = 56;
+function treeLayout(tree) {
+    const nb = tree.branches.length;
+    const W = nb * TREE_COL, H = 4 * TREE_ROW + 30;
+    const nodes = [];
+    tree.branches.forEach((b, bi) => b.tiers.forEach((tier, ti) => tier.forEach((sk, si) => {
+        nodes.push({ sk, bi, ti, si, x: bi * TREE_COL + TREE_COL / 2 + (si ? 44 : -44), y: H - 70 - (ti + 1) * TREE_ROW });
+    })));
+    return { W, H, nodes, root: { x: W / 2, y: H - 46 } };
+}
+function renderTreeWin(flashId, create) {
+    let w = document.getElementById('rpg-sk-win');
+    if (!w) {
+        if (!create) return;   // a redraw never opens the window by itself
+        w = document.createElement('div');
+        w.id = 'rpg-sk-win';
+        w.className = 'rpg-sk-win';
+        w.setAttribute('role', 'dialog');
+        w.setAttribute('aria-label', t('sk_tree'));
+        document.body.appendChild(w);
+        w.addEventListener('click', onTreeClick);
+        skWinDrag(w);
+    }
+    const tree = myTree();
+    const s = skState();
+    const pts = skPoints();
+    w.style.setProperty('--skw', (tree && !treeChoosing ? Math.max(580, tree.branches.length * TREE_COL + 40) : 580) + 'px');
+    let body;
+    if (!tree || treeChoosing) {
+        body = `<div class="rpg-sk-empty">
+            <div class="rpg-sk-seed" aria-hidden="true">🌱</div>
+            <p>${escapeHtml(!settings.skillClassesOn ? t('sk_empty_plain') : tree ? t('sk_regrow') : t('sk_empty'))}</p>
+            ${settings.skillClassesOn ? skClassHtml() : ''}
+            <button type="button" class="rpg-sk-main" data-make="1" ${treeBusy ? 'disabled' : ''}>${treeBusy ? `<i class="fa-solid fa-spinner fa-spin"></i> ${escapeHtml(t('sk_making'))}` : `🌿 ${escapeHtml(t('sk_make'))}`}</button>
+
+            ${tree ? `<button type="button" class="rpg-sk-back" data-unchoose="1">← ${escapeHtml(t('sk_back_tree'))}</button>` : ''}</div>`;
+    } else {
+        const L = treeLayout(tree);
+        const pos = {}; L.nodes.forEach(n => { pos[n.sk.id] = n; });
+        const lines = [];
+        L.nodes.forEach(n => {
+            const st = skStatus(n.sk.id);
+            const from = n.ti === 0 ? L.root : null;
+            const link = (a, b, cls) => lines.push(`<path class="${cls}" d="M${a.x},${a.y} C${a.x},${(a.y + b.y) / 2} ${b.x},${(a.y + b.y) / 2} ${b.x},${b.y}"/>`);
+            if (from) link(from, n, st === 'taken' ? 'on' : st === 'sealed' ? 'off' : '');
+            else {
+                [0, 1].forEach(k => {
+                    const p = pos[`b${n.bi}t${n.ti - 1}s${k}`];
+                    if (p && skStatus(p.sk.id) !== 'sealed') link(p, n, st === 'taken' && skStatus(p.sk.id) === 'taken' ? 'on' : st === 'sealed' ? 'off' : '');
+                });
+            }
+        });
+        const nodesHtml = L.nodes.map(n => {
+            const st = skStatus(n.sk.id);
+            const pinned = s && s.bar.includes(n.sk.id);
+            return `<button type="button" class="rpg-sk-node ${st}${treeSel === n.sk.id ? ' sel' : ''}${flashId === n.sk.id ? ' flash' : ''}" data-node="${escapeHtml(n.sk.id)}" style="left:${n.x - TREE_NODE / 2}px;top:${n.y - TREE_NODE / 2}px" aria-label="${escapeHtml(n.sk.name + ' · ' + t('sk_st_' + st))}">
+                <span class="rpg-sk-ic" aria-hidden="true">${st === 'sealed' ? '🔒' : SKILL_KIND_ICON[n.sk.effect.kind]}</span>
+                ${pinned ? '<span class="rpg-sk-pin" aria-hidden="true">📌</span>' : ''}
+                <span class="rpg-sk-name">${escapeHtml(n.sk.name)}</span></button>`;
+        }).join('');
+        const heads = tree.branches.map((b, bi) => `<div class="rpg-sk-branch" style="left:${bi * TREE_COL}px;width:${TREE_COL}px"><span aria-hidden="true">${escapeHtml(b.icon)}</span> ${escapeHtml(b.name)}</div>`).join('');
+        let panel = '';
+        if (treeSel) {
+            const sk = skillById(treeSel);
+            const st = sk ? skStatus(sk.id) : '';
+            if (sk) {
+                const pinned = s.bar.includes(sk.id);
+                panel = skDetailHtml(sk, st, pinned, s);
+            }
+        }
+        body = `<div class="rpg-sk-stage" tabindex="0" aria-label="${escapeHtml(t('sk_stage'))}">
+                <div class="rpg-sk-plane" style="width:${L.W}px;height:${L.H}px;transform:translate(${treeView.x}px,${treeView.y}px) scale(${treeView.z})">
+                    ${heads}
+                    <svg class="rpg-sk-lines" width="${L.W}" height="${L.H}" aria-hidden="true">${lines.join('')}</svg>
+                    <div class="rpg-sk-root" style="left:${L.root.x - 30}px;top:${L.root.y - 30}px" aria-hidden="true">✦</div>
+                    ${nodesHtml}
+                </div>
+                <div class="rpg-sk-zoom"><button type="button" data-zoom="1" aria-label="${escapeHtml(t('sk_zoom_in'))}">+</button><button type="button" data-zoom="-1" aria-label="${escapeHtml(t('sk_zoom_out'))}">−</button><button type="button" data-zoom="0" aria-label="${escapeHtml(t('sk_zoom_fit'))}">⤢</button></div>
+            </div>${panel}`;
+    }
+    const lvl = settings.levelEnabled ? Math.max(1, Number(state && state.level) || 1) : 1;
+    w.innerHTML = `
+        <div class="rpg-sk-head">
+            <span class="rpg-sk-title">🌿 ${escapeHtml(t('sk_tree'))} · ${escapeHtml(playerName())}${tree && tree.cls ? ` · ${escapeHtml(tree.cls)}` : ''}</span>
+            ${tree ? `<span class="rpg-sk-pts${pts ? ' has' : ''}" title="${escapeHtml(t('sk_pts_t'))}">${escapeHtml(t('sk_pts', { n: pts }))}</span>` : ''}
+            <button type="button" class="rpg-sk-x" data-close="1" aria-label="${escapeHtml(t('close'))}">✕</button>
+        </div>
+        ${body}
+        ${tree && !treeChoosing ? `<div class="rpg-sk-foot">
+            <span>${escapeHtml(settings.levelEnabled ? t('sk_lvl', { n: lvl }) : t('sk_lvl_off'))}${!skActiveNow() ? ' · ' + escapeHtml(t(settings.skillsOnlyTrials ? 'sk_only_trials' : 'sk_off')) : ''}</span>
+            <span class="rpg-sk-foot-acts">
+                <button type="button" class="rpg-sk-ghost" data-reset="1" ${s && s.taken.length ? '' : 'disabled'}>${escapeHtml(t('sk_reset'))}</button>
+                <button type="button" class="rpg-sk-ghost" data-make="1" ${treeBusy ? 'disabled' : ''}>${escapeHtml(t('sk_remake'))}</button>
+            </span></div>` : ''}`;
+    const stage = w.querySelector('.rpg-sk-stage');
+    if (stage) skStagePan(stage);
+}
+function treeApply() { const p = document.querySelector('#rpg-sk-win .rpg-sk-plane'); if (p) p.style.transform = `translate(${treeView.x}px,${treeView.y}px) scale(${treeView.z})`; }
+function treeFitZ() {
+    const base = innerWidth < 640 ? 0.8 : 1, st = document.querySelector('#rpg-sk-win .rpg-sk-stage'), tr = myTree();
+    if (!st || !tr || !st.clientWidth) return base;
+    return Math.max(0.5, Math.min(base, st.clientWidth / (tr.branches.length * TREE_COL + 20)));   // a wide tree is seen whole
+}
+function treeZoom(d) { treeView.z = d === 0 ? treeFitZ() : Math.max(0.5, Math.min(1.8, treeView.z + d * 0.15)); if (d === 0) { treeView.x = 0; treeView.y = 0; } treeApply(); }
+function skStagePan(stage) {
+    stage.addEventListener('wheel', e => { e.preventDefault(); treeZoom(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+    stage.addEventListener('pointerdown', e => {
+        if (e.button !== 0 || e.target.closest('button')) return;
+        const sx = e.clientX, sy = e.clientY, ox = treeView.x, oy = treeView.y;
+        const tap = ev => { window.removeEventListener('pointerup', tap); if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5 && treeSel) treeSelect(null); };
+        window.addEventListener('pointerup', tap);
+        stage.classList.add('panning');
+        const move = ev => { treeView.x = ox + ev.clientX - sx; treeView.y = oy + ev.clientY - sy; treeApply(); };
+        const up = () => { stage.classList.remove('panning'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+        window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+    });
+    stage.addEventListener('keydown', e => {
+        const k = { ArrowLeft: [30, 0], ArrowRight: [-30, 0], ArrowUp: [0, 30], ArrowDown: [0, -30] }[e.key];
+        if (k) { e.preventDefault(); treeView.x += k[0]; treeView.y += k[1]; treeApply(); }
+        else if (e.key === '+' || e.key === '=') treeZoom(1);
+        else if (e.key === '-') treeZoom(-1);
+    });
+    stage.addEventListener('pointerover', e => { const n = e.target.closest('[data-node]'); if (n && !treeSel) showSkTip(n, n.dataset.node); });
+    stage.addEventListener('pointerout', e => { if (e.target.closest('[data-node]')) hideSkTip(); });
+}
+function skWinDrag(w) {
+    w.addEventListener('pointerdown', e => {
+        const h = e.target.closest('.rpg-sk-head');
+        if (!h || e.button !== 0 || e.target.closest('button')) return;
+        const r = w.getBoundingClientRect();
+        const sx = e.clientX, sy = e.clientY;
+        const move = ev => {
+            w.style.left = Math.max(-r.width + 80, Math.min(innerWidth - 80, r.left + ev.clientX - sx)) + 'px';
+            w.style.top = Math.max(0, Math.min(innerHeight - 40, r.top + ev.clientY - sy)) + 'px';
+            w.style.right = 'auto'; w.style.bottom = 'auto'; w.style.margin = '0';
+        };
+        const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+        window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+    });
+}
+function onTreeClick(e) {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.close) { closeTreeWin(); return; }
+    if (b.dataset.zoom !== undefined) { treeZoom(Number(b.dataset.zoom)); return; }
+    if (b.dataset.make) {
+        // over a grown tree "grow anew" first opens the class choice; growing from there asks once
+        if (myTree() && !treeChoosing) { treeChoosing = true; treeSel = null; renderTreeWin(); return; }
+        if (myTree() && !confirm(t('sk_remake_q'))) return;
+        makeTree(); return;
+    }
+    if (b.dataset.unchoose) { treeChoosing = false; renderTreeWin(); return; }
+    if (b.dataset.suggest) { suggestClasses(); return; }
+    if (b.dataset.cls !== undefined) {
+        const box = skClassBox(); const c = box.list[Number(b.dataset.cls)];
+        if (!c) return;
+        box.chosen = box.chosen && box.chosen.name === c.name ? null : { name: c.name, desc: c.desc };
+        saveSettings();
+        document.querySelectorAll('#rpg-sk-win .rpg-sk-cls').forEach(x => { const cc = box.list[Number(x.dataset.cls)]; const on = !!(cc && box.chosen && box.chosen.name === cc.name); x.classList.toggle('on', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+        const own = document.querySelector('#rpg-sk-win .rpg-sk-own-in'); if (own && box.chosen) own.value = '';
+        return;
+    }
+    if (b.dataset.reset) {
+        if (!confirm(t('sk_reset_q'))) return;
+        syncChat(); const s = skState(); if (s) { s.taken = []; s.bar = []; s.cd = {}; saveState(); }
+        treeSel = null; renderTreeWin(); renderSkillBar(); return;
+    }
+    if (b.dataset.node) { hideSkTip(); treeSelect(treeSel === b.dataset.node ? null : b.dataset.node); return; }
+    if (b.dataset.take) { const id = b.dataset.take; if (takeSkill(id)) toastr.success(skillById(id).name, t('sk_learned')); return; }
+    if (b.dataset.pin) {
+        syncChat(); const s = skState(); const id = b.dataset.pin;
+        if (s.bar.includes(id)) s.bar = s.bar.filter(x => x !== id); else if (s.bar.length < SKILL_BAR_MAX) s.bar.push(id);
+        saveState(); treeSelect(id); renderSkillBar();
+        const node = document.querySelector(`#rpg-sk-win .rpg-sk-node[data-node="${CSS.escape(id)}"]`);
+        if (node) { const has = node.querySelector('.rpg-sk-pin'); if (s.bar.includes(id) && !has) node.insertAdjacentHTML('beforeend', '<span class="rpg-sk-pin" aria-hidden="true">📌</span>'); else if (!s.bar.includes(id) && has) has.remove(); }
+    }
+}
