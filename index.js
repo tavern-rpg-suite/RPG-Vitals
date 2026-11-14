@@ -132,7 +132,7 @@ const I18N = {
         sk_tree: 'Skill tree', sk_bar: 'Skills', sk_stage: 'The tree: drag to move, wheel or + and − to zoom',
         sk_empty: 'The class decides what the branches are about.', sk_empty_plain: 'The tree grows from your persona and this story.', sk_make: 'Grow the tree', sk_make_note: 'One request to the model, once for your persona in this story.',
         sk_making: 'Growing the tree…', sk_made: 'The tree has grown.', sk_make_fail: 'The tree could not be grown', sk_fail_shape: 'the model answered, but not with a tree (its answer is in the console, F12)', sk_fail_empty: 'the model gave an empty answer', sk_part: 'The tree is unfinished: the model wrote {n} skills of {all}, twice{why}. “Grow anew” tries again.', sk_stop_len: 'it ran out of answer length (raise the context size of your local server)', sk_tok: '(read {i} tokens, wrote {o})', sk_no_key: 'No API key in RPG Vitals.',
-        sk_remake: 'Grow anew', sk_remake_q: 'Grow a new tree? The skills learned in this chat are forgotten.', sk_reset: 'Forget the skills', sk_reset_q: 'Forget every skill learned in this chat? The points come back.',
+        sk_grow: 'Branch', sk_grow_t: 'The tree is full: three spare points grow it one more branch', sk_growing: 'Growing…', sk_grown: 'A new branch has grown', sk_grow_fail: 'Could not grow a branch', sk_crafts: 'Crafts', sk_crafts_t: 'Crafts learned at RPG Vendors: their lasting bonuses, and the skill points their mastery gave this tree', sk_grow_soon: '{n} more point(s) and the tree grows a new branch', sk_remake: 'Grow anew', sk_remake_q: 'Grow a new tree? The skills learned in this chat are forgotten.', sk_reset: 'Forget the skills', sk_reset_q: 'Forget every skill learned in this chat? The points come back.',
         sk_pts: 'Points: {n}', sk_pts_t: 'One at the start, one per level, and those won in trials', sk_lvl: 'Level {n}', sk_lvl_off: 'Levels are off: points come only from trials',
         sk_st_taken: 'Learned', sk_st_sealed: 'Sealed: the other skill of this tier was chosen', sk_st_locked: 'Learn a skill of the tier below first', sk_st_open: 'Can be learned', sk_st_nopoints: 'No points left',
         sk_take: 'Learn · 1 point', sk_learned: 'Learned', sk_pin: 'To the bar', sk_unpin: 'Take off the bar', sk_on_bar: 'On the bar', sk_close_d: 'Close', sk_on_whom: 'on whom?', sk_self: 'Myself', sk_fx_on: 'on {name}', sk_box_on: '*{name} uses "{skill}" on {target}: {desc}*', sk_next_reply: 'It is in your message: send it', sk_box_use: '*{name} uses "{skill}": {desc}*', sk_box_combo: '*{name} calls {partner} for a joint move: "{skill}".*', sk_with: 'With whom',
@@ -201,7 +201,7 @@ const I18N = {
         angel_fail: 'Ангел не пришёл — не удалось достучаться до модели.',
         angel_newchat_manual: 'Создай новый чат сам: эта сборка не умеет отсюда.',
         angel_buff_name: 'Благословение ангела', angel_buff_eff: 'Возвращён с края; раны затягиваются быстрее, чем должны',
-        angel_chat_win: '{name} сжалился. Ангел отправляет {{user}} обратно — живым, вопреки всему.',
+        angel_chat_win: '{name}: милость дарована. Ангел отправляет {{user}} обратно — к живым, вопреки всему.',
         toast_starving: '{{user}} голодает!', toast_fed: 'Сытость +{n}.',
         set_hunger: 'Включить голод (убывает по сообщениям)', set_hunger_every: 'Убывает каждые N сообщений бота:', set_hunger_amount: 'Сколько сытости теряется за раз:', set_starve_dmg: 'HP теряется за сообщение при голоде:',
         set_autodetect: 'Авто-обновление HP / сытости / эффектов из сюжета', set_gm: 'Показывать ручные кнопки (режим мастера)', set_url: 'API URL:', set_key: 'API-ключ:', set_model: 'Модель:', auto_changed: 'Сцена изменила твоё состояние.',
@@ -225,7 +225,7 @@ const I18N = {
         sk_tree: 'Древо навыков', sk_bar: 'Навыки', sk_stage: 'Древо: тащи, чтобы двигать; колесо или + и −, чтобы приблизить',
         sk_empty: 'Класс решает, о чём будут ветки.', sk_empty_plain: 'Древо вырастет из твоей персоны и этой истории.', sk_make: 'Вырастить древо', sk_make_note: 'Один запрос к модели, один раз для твоей персоны в этой истории.',
         sk_making: 'Древо растёт…', sk_made: 'Древо выросло.', sk_make_fail: 'Не удалось вырастить древо', sk_fail_shape: 'модель ответила, но не древом (её ответ в консоли, F12)', sk_fail_empty: 'модель вернула пустой ответ', sk_part: 'Древо недописано: модель дважды написала {n} навыков из {all}{why}. «Вырастить заново» — ещё попытка.', sk_stop_len: 'ей не хватило длины ответа (увеличь размер контекста у локального сервера)', sk_tok: '(прочитала {i} токенов, написала {o})', sk_no_key: 'В RPG Vitals нет ключа API.',
-        sk_remake: 'Вырастить заново', sk_remake_q: 'Вырастить новое древо? Навыки, изученные в этом чате, забудутся.', sk_reset: 'Забыть навыки', sk_reset_q: 'Забыть все навыки этого чата? Очки вернутся.',
+        sk_grow: 'Ветка', sk_grow_t: 'Древо заполнено: три лишних очка дорастят его новой веткой', sk_growing: 'Растёт…', sk_grown: 'Выросла новая ветка', sk_grow_fail: 'Не удалось вырастить ветку', sk_crafts: 'Ремёсла', sk_crafts_t: 'Ремёсла из RPG Vendors: их постоянные бонусы и очки навыка, которые мастерство дало этому древу', sk_grow_soon: 'ещё очков: {n} — и древо даст новую ветку', sk_remake: 'Вырастить заново', sk_remake_q: 'Вырастить новое древо? Навыки, изученные в этом чате, забудутся.', sk_reset: 'Забыть навыки', sk_reset_q: 'Забыть все навыки этого чата? Очки вернутся.',
         sk_pts: 'Очки: {n}', sk_pts_t: 'Одно на старте, по одному за уровень и выигранные в испытаниях', sk_lvl: 'Уровень {n}', sk_lvl_off: 'Уровни выключены: очки только из испытаний',
         sk_st_taken: 'Изучен', sk_st_sealed: 'Запечатан: на этом ярусе выбран другой навык', sk_st_locked: 'Сначала изучи навык ярусом ниже', sk_st_open: 'Можно изучить', sk_st_nopoints: 'Очков не осталось',
         sk_take: 'Изучить · 1 очко', sk_learned: 'Изучено', sk_pin: 'На панель', sk_unpin: 'Убрать с панели', sk_on_bar: 'На панели', sk_close_d: 'Закрыть', sk_on_whom: 'на кого?', sk_self: 'На себя', sk_fx_on: 'на {name}', sk_box_on: '*{name} использует «{skill}» на {target}: {desc}*', sk_next_reply: 'Он уже в твоём сообщении: отправь его', sk_box_use: '*{name} использует «{skill}»: {desc}*', sk_box_combo: '*{name} зовёт {partner} на совместный приём: «{skill}».*', sk_with: 'С кем',
@@ -459,6 +459,7 @@ function setHunger(n) { if (!state) return; state.hunger = n; clampHunger(); sav
 // ---- level / mana / fatigue (all optional, AI-driven like hunger) ----
 const MAX_LEVEL = 100;
 const XP_PER_LEVEL = 100;
+const XP_PER_REPLY_MAX = 50;
 function addXp(n) {
     if (!settings.levelEnabled || !state) return;
     n = Math.round(n || 0);
@@ -1100,7 +1101,8 @@ Output strictly JSON: {${fields}}`;
         if (settings.hungerEnabled && typeof res.satiety_delta === 'number' && res.satiety_delta !== 0) { setHunger(state.hunger + res.satiety_delta); notes.push(`${t('lbl_satiety')} ${res.satiety_delta > 0 ? '+' : ''}${res.satiety_delta}`); }
         if (settings.manaEnabled && typeof res.mana_delta === 'number' && res.mana_delta !== 0) { addMana(res.mana_delta); notes.push(`${t('mana_word')} ${res.mana_delta > 0 ? '+' : ''}${res.mana_delta}`); }
         if (settings.fatigueEnabled && typeof res.fatigue_delta === 'number' && res.fatigue_delta !== 0) { addFatigue(res.fatigue_delta); notes.push(`${t('fatigue_word')} ${res.fatigue_delta > 0 ? '+' : ''}${res.fatigue_delta}`); }
-        if (settings.levelEnabled && typeof res.xp_delta === 'number' && res.xp_delta > 0) { addXp(res.xp_delta); notes.push(`${t('xp')} +${res.xp_delta}`); }
+        // one reply gives at most 50 experience (half a level): a generous answer of the model does not hand out levels
+        if (settings.levelEnabled && typeof res.xp_delta === 'number' && res.xp_delta > 0) { const xp = Math.min(XP_PER_REPLY_MAX, Math.round(res.xp_delta)); addXp(xp); notes.push(`${t('xp')} +${xp}`); }
         const intim = askIntimacy ? String(res.intimacy || 'none').toLowerCase() : 'none';
         const intimNotes = [];
         for (const e of (Array.isArray(res.add_effects) ? res.add_effects : [])) {
@@ -1884,6 +1886,14 @@ function angelClose() {
    start, not what stops it. */
 let angelDrawn = false;
 
+/* Line-drawn ornaments in the sheet's own ink, never emoji: a pair of wings over the
+   title, a small flame for each forgiven mistake, a tick and a cross for the answer. */
+const ANG_WINGS = '<svg class="ang-wings" viewBox="0 0 120 34" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" aria-hidden="true"><path d="M60 26c-5-7-15-11-26-11-9 0-17 3-25 9 7-1 13 0 18 2-6 1-11 3-15 6 8-2 16-2 23 0 9 2 17 0 25-6z"/><path d="M60 26c5-7 15-11 26-11 9 0 17 3 25 9-7-1-13 0-18 2 6 1 11 3 15 6-8-2-16-2-23 0-9 2-17 0-25-6z"/><path d="M38 19c-6 1-11 3-15 6M82 19c6 1 11 3 15 6" opacity=".6"/><circle cx="60" cy="9" r="5.5"/><path d="M60 26v6" opacity=".7"/></svg>';
+const ANG_FLAME = '<svg viewBox="0 0 12 16" aria-hidden="true"><path d="M6 1c1 3-2.5 4-2.5 7.5A2.5 2.5 0 0 0 6 11a2.5 2.5 0 0 0 2.5-2.5C8.5 7.4 8 6.6 7.4 6 9.6 7.6 10.5 9.4 10.5 11A4.5 4.5 0 0 1 1.5 11C1.5 7 5 5.5 6 1z"/><path class="wick" d="M6 15v-2"/></svg>';
+const ANG_TICK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+const ANG_CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>';
+const ANG_LETTERS = { en: ['A', 'B', 'C', 'D', 'E', 'F'], ru: ['А', 'Б', 'В', 'Г', 'Д', 'Е'] };   // a Russian sheet letters its answers in Russian
+
 function angelRender() {
     let el = document.getElementById('rpg-angel');
     if (!angelState) { if (el) el.remove(); angelDrawn = false; return; }
@@ -1891,6 +1901,8 @@ function angelRender() {
     if (!el) {
         el = document.createElement('div');
         el.id = 'rpg-angel';
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
         document.body.appendChild(el);
         angelDrawn = false;                      // a fresh card may make its entrance
     }
@@ -1899,53 +1911,37 @@ function angelRender() {
 
     const st = angelState;
     const d = st.data;
+    const head = (title, name) => `<div class="ang-crest">${ANG_WINGS}</div>
+        ${title ? `<div class="ang-title ang-bleed">${escapeHtml(title)}</div>` : ''}
+        ${name ? `<div class="ang-name">${escapeHtml(name)}</div>` : ''}`;
+    const sheet = (cls, inner) => `<div class="ang-dim"></div>
+        <div class="ang-card ${cls}"><i class="ang-corner tl"></i><i class="ang-corner tr"></i><i class="ang-corner bl"></i><i class="ang-corner br"></i>${inner}</div>`;
+    const btn = (kind, act, icon, label) => `<button class="ang-btn ${kind}" data-ang="${act}"><i class="fa-solid ${icon}" aria-hidden="true"></i><span>${escapeHtml(label)}</span></button>`;
 
     if (st.loading) {
-        el.innerHTML = `<div class="ang-dim"></div>
-            <div class="ang-card ang-wait"><div class="ang-title">${escapeHtml(t('angel_dead'))}</div>
-            <div class="ang-sub">${escapeHtml(t('angel_waiting'))}</div></div>`;
+        el.innerHTML = sheet('ang-wait', `${head(t('angel_dead'), '')}
+            <div class="ang-sub">${escapeHtml(t('angel_waiting'))}</div>`);
         return;
     }
 
     if (st.done === 'win') {
-        el.innerHTML = `<div class="ang-dim"></div>
-            <div class="ang-card ang-good">
-                <div class="ang-name">${escapeHtml(d ? d.name : '')}</div>
-                <div class="ang-speech">${escapeHtml(d && d.onWin ? d.onWin : '')}</div>
+        el.innerHTML = sheet('ang-good', `${head('', d ? d.name : '')}
+                ${d && d.onWin ? `<div class="ang-speech">${escapeHtml(d.onWin)}</div>` : ''}
                 <div class="ang-verdict">${escapeHtml(t('angel_spared'))}</div>
-                <div class="ang-actions"><button class="ang-btn ok" data-ang="close">${escapeHtml(t('angel_back'))}</button></div>
-            </div>`;
+                <div class="ang-actions">${btn('ok', 'close', 'fa-feather', t('angel_back'))}</div>`);
         angelWire(el);
         return;
     }
 
-    if (st.done === 'again') {
-        el.innerHTML = `<div class="ang-dim"></div>
-            <div class="ang-card">
-                <div class="ang-title ang-bleed">${escapeHtml(t('angel_dead'))}</div>
-                <div class="ang-speech">${escapeHtml(t('angel_again'))}</div>
+    if (st.done === 'again' || st.done === 'lose') {
+        const speech = st.done === 'again' ? t('angel_again') : (d && d.onLose ? d.onLose : '');
+        el.innerHTML = sheet('ang-lost', `${head(t('angel_dead'), st.done === 'lose' && d ? d.name : '')}
+                ${speech ? `<div class="ang-speech">${escapeHtml(speech)}</div>` : ''}
                 <div class="ang-actions">
-                    <button class="ang-btn" data-ang="close">${escapeHtml(t('angel_stay'))}</button>
-                    <button class="ang-btn danger" data-ang="new">${escapeHtml(t('angel_restart'))}</button>
+                    ${btn('ghost', 'close', 'fa-hourglass-end', t('angel_stay'))}
+                    ${btn('danger', 'new', 'fa-rotate-left', t('angel_restart'))}
                 </div>
-                <div class="ang-note">${escapeHtml(t('angel_kept'))}</div>
-            </div>`;
-        angelWire(el);
-        return;
-    }
-
-    if (st.done === 'lose') {
-        el.innerHTML = `<div class="ang-dim"></div>
-            <div class="ang-card">
-                <div class="ang-title ang-bleed">${escapeHtml(t('angel_dead'))}</div>
-                <div class="ang-name">${escapeHtml(d ? d.name : '')}</div>
-                <div class="ang-speech">${escapeHtml(d && d.onLose ? d.onLose : '')}</div>
-                <div class="ang-actions">
-                    <button class="ang-btn" data-ang="close">${escapeHtml(t('angel_stay'))}</button>
-                    <button class="ang-btn danger" data-ang="new">${escapeHtml(t('angel_restart'))}</button>
-                </div>
-                <div class="ang-note">${escapeHtml(t('angel_kept'))}</div>
-            </div>`;
+                <div class="ang-note">${escapeHtml(t('angel_kept'))}</div>`);
         angelWire(el);
         return;
     }
@@ -1953,30 +1949,34 @@ function angelRender() {
     const q = d.questions[st.idx];
     const left = d.allowed - st.wrong;
     const opts = q.options.map((o, i) => {
-        let cls = '';
+        let cls = '', mark = escapeHtml(ANG_LETTERS[settings.language === 'ru' ? 'ru' : 'en'][i] || String(i + 1));
         if (st.answered) {
-            if (i === q.answer) cls = 'right';
-            else if (i === st.picked) cls = 'wrong';
+            if (i === q.answer) { cls = 'right'; mark = ANG_TICK; }
+            else if (i === st.picked) { cls = 'wrong'; mark = ANG_CROSS; }
+            else cls = 'rest';
         }
-        return `<button class="ang-opt ${cls}" data-ang="pick" data-i="${i}" ${st.answered ? 'disabled' : ''}>${escapeHtml(o)}</button>`;
+        return `<button class="ang-opt ${cls}" data-ang="pick" data-i="${i}" ${st.answered ? 'disabled' : ''}><span class="ang-key">${mark}</span><span class="ang-otext">${escapeHtml(o)}</span></button>`;
     }).join('');
+    // where the trial stands: a pip per question, a flame per mistake still forgiven
+    const pips = d.questions.map((_, i) => `<i class="${i < st.idx ? 'past' : (i === st.idx ? 'now' : '')}"></i>`).join('');
+    const flames = Array.from({ length: d.allowed }, (_, i) => `<span class="ang-flame ${i < left ? 'lit' : 'out'}">${ANG_FLAME}</span>`).join('');
+    const last = st.wrong > d.allowed || st.idx + 1 >= d.questions.length;
 
-    el.innerHTML = `<div class="ang-dim"></div>
-        <div class="ang-card">
-            <div class="ang-title ang-bleed">${escapeHtml(t('angel_dead'))}</div>
-            <div class="ang-name">${escapeHtml(d.name)}</div>
+    el.innerHTML = sheet('', `${head(t('angel_dead'), d.name)}
             ${st.idx === 0 && d.greeting ? `<div class="ang-speech">${escapeHtml(d.greeting)}</div>` : ''}
             <div class="ang-meta">
-                <span>${escapeHtml(t('angel_q', { n: st.idx + 1, of: d.questions.length }))}</span>
-                <span class="ang-lives ${left <= 0 ? 'last' : ''}">${escapeHtml(t('angel_left', { n: Math.max(0, left) }))}</span>
+                <span class="ang-prog"><span class="ang-pips">${pips}</span>${escapeHtml(t('angel_q', { n: st.idx + 1, of: d.questions.length }))}</span>
+                <span class="ang-lives ${left <= 0 ? 'last' : ''}"><span class="ang-flames">${flames}</span>${escapeHtml(t('angel_left', { n: Math.max(0, left) }))}</span>
             </div>
             <div class="ang-q">${escapeHtml(q.q)}</div>
             <div class="ang-opts">${opts}</div>
-            ${st.answered ? `<div class="ang-note ${st.lastRight ? 'ok' : 'bad'}">${escapeHtml(q.note || '')}</div>
-                <div class="ang-actions"><button class="ang-btn ok" data-ang="next">${escapeHtml(
-                    st.wrong > d.allowed ? t('angel_verdict') : (st.idx + 1 >= d.questions.length ? t('angel_verdict') : t('angel_next')))}</button></div>` : ''}
-        </div>`;
+            ${st.answered ? `${q.note ? `<div class="ang-note ${st.lastRight ? 'ok' : 'bad'}">${escapeHtml(q.note)}</div>` : ''}
+                <div class="ang-actions">${btn('ok', 'next', last ? 'fa-scale-balanced' : 'fa-arrow-right', last ? t('angel_verdict') : t('angel_next'))}</div>` : ''}`);
     angelWire(el);
+    // after an answer the next step gets the focus, so Enter goes on (the answers are not
+    // pre-focused: a highlighted first answer reads as one already chosen)
+    const focus = st.answered ? el.querySelector('[data-ang="next"]') : null;
+    if (focus) try { focus.focus({ preventScroll: true }); } catch (e) { /* old browsers */ }
 }
 
 function angelWire(el) {
@@ -3214,6 +3214,58 @@ async function makeTree() {
     }
 }
 
+/* The tree is full and the levels go on: three points to spare grow it one more branch (at most six).
+   The prompt is the player's tree prompt for one branch, with the branches it already has named. */
+const SKILL_BRANCH_MORE = 'The tree already has these branches: {HAVE}. Make one new branch unlike them, for the same character and world.';
+const SKILL_GROW_COST = 3, SKILL_BRANCHES_MAX = 6;
+function skTreeFull(tree, s) { return !!(tree && s && tree.branches.every((b, bi) => b.tiers.every((tier, ti) => s.taken.some(id => id.startsWith(`b${bi}t${ti}s`))))); }
+function canGrowBranch() {
+    const tree = myTree(), s = state ? skState() : null;
+    return !!(tree && s && tree.branches.length < SKILL_BRANCHES_MAX && skTreeFull(tree, s) && skPoints() >= SKILL_GROW_COST);
+}
+async function growBranch() {
+    if (treeBusy || !canGrowBranch()) return;
+    if (!apiKey()) { toastr.error(t('sk_no_key')); return; }
+    const key = skPersonaKey(), tree = myTree();
+    treeBusy = true;
+    const btn = document.querySelector('#rpg-sk-win [data-grow]');
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${escapeHtml(t('sk_growing'))}`; }
+    let why = '';
+    try {
+        const sys = (skFill(String(settings.skillPrompt || '').trim() ? settings.skillPrompt : SKILL_TREE_DEFAULT, {
+            NAME: playerName(), SOURCE: skSource(), BRANCHES: 1, LANG: `Write the names and descriptions in ${genLang()}.`, WORLD: await skWorld(),
+            CLASS: settings.skillClassesOn && skChosen() ? `Class chosen by the player: ${skChosen().name}${skChosen().desc ? ' (' + skChosen().desc + ')' : ''}. Build every branch around this class.` : ''
+        }) + '\n' + SKILL_BRANCH_MORE.replace('{HAVE}', tree.branches.map(b => b.name).join(', '))).replace(/\n{3,}/g, '\n\n');
+        let branch = null;
+        for (let i = 0; i < 2 && !branch; i++) {
+            const o = { maxTokens: 2000, lenient: true, once: true };
+            let raw = null;
+            try { raw = await callAI(sys, i ? 'Write the new branch. Reply with the JSON object only.' : 'Write the new branch.', o); }
+            catch (e) {
+                why = String(e && e.message || e).slice(0, 120);
+                if (/HTTP 4\d\d/.test(why) && i === 0) { try { const o2 = { lenient: true, once: true }; raw = await callAI(sys, 'Write the new branch.', o2); o.raw = o2.raw; why = ''; } catch (e2) { why = String(e2 && e2.message || e2).slice(0, 120); } }
+                if (!raw) break;
+            }
+            const got = normalizeTree(raw, 1);
+            const b = got && got.branches[0];
+            if (b && b.tiers.length >= 3) branch = b;
+            else { why = (o.raw ? t('sk_fail_shape') : t('sk_fail_empty')) + skStopWhy(o); console.warn('[RPG Vitals] the new branch could not be read:', { finish: o.finish, usage: o.usage, answer: String(o.raw || '').slice(0, 6000) }); }
+        }
+        if (!branch) { toastr.error(`${t('sk_grow_fail')}${why ? ' — ' + why : ''}`); return; }
+        if (skPersonaKey() !== key || myTree() !== tree) return;   // the persona or the tree changed while the model thought
+        tree.branches.push(branch);
+        saveSettings();
+        toastr.success(branch.name, t('sk_grown'));
+    } catch (e) {
+        console.warn('[RPG Vitals] branch', e);
+        toastr.error(`${t('sk_grow_fail')} — ${String(e && e.message || e).slice(0, 120)}`);
+    } finally {
+        treeBusy = false;
+        renderTreeWin(); renderSkillBar();
+        treeZoom(0);
+    }
+}
+
 /* ---------- the bar in the message box ---------- */
 function renderSkillBar() {
     let bar = document.getElementById('rpg-vit-skillbar');
@@ -3514,14 +3566,39 @@ function renderTreeWin(flashId, create) {
             <button type="button" class="rpg-sk-x" data-close="1" aria-label="${escapeHtml(t('close'))}">✕</button>
         </div>
         ${body}
+        ${tree && !treeChoosing ? craftsStripHtml() : ''}
         ${tree && !treeChoosing ? `<div class="rpg-sk-foot">
-            <span>${escapeHtml(settings.levelEnabled ? t('sk_lvl', { n: lvl }) : t('sk_lvl_off'))}${!skActiveNow() ? ' · ' + escapeHtml(t(settings.skillsOnlyTrials ? 'sk_only_trials' : 'sk_off')) : ''}</span>
+            <span>${escapeHtml(settings.levelEnabled ? t('sk_lvl', { n: lvl }) : t('sk_lvl_off'))}${!skActiveNow() ? ' · ' + escapeHtml(t(settings.skillsOnlyTrials ? 'sk_only_trials' : 'sk_off')) : ''}${tree.branches.length < SKILL_BRANCHES_MAX && skTreeFull(tree, s) && pts < SKILL_GROW_COST ? ' · ' + escapeHtml(t('sk_grow_soon', { n: SKILL_GROW_COST - pts })) : ''}</span>
             <span class="rpg-sk-foot-acts">
+                ${canGrowBranch() ? `<button type="button" class="rpg-sk-grow" data-grow="1" title="${escapeHtml(t('sk_grow_t'))}" ${treeBusy ? 'disabled' : ''}>＋ ${escapeHtml(t('sk_grow'))}</button>` : ''}
                 <button type="button" class="rpg-sk-ghost" data-reset="1" ${s && s.taken.length ? '' : 'disabled'}>${escapeHtml(t('sk_reset'))}</button>
                 <button type="button" class="rpg-sk-ghost" data-make="1" ${treeBusy ? 'disabled' : ''}>${escapeHtml(t('sk_remake'))}</button>
             </span></div>` : ''}`;
     const stage = w.querySelector('.rpg-sk-stage');
     if (stage) skStagePan(stage);
+}
+/* Crafts beside the tree: what RPG Vendors reports (window.RPG.crafts), each with its
+   level and lasting bonus, written out — nothing to hover for. Absent when there are none. */
+const CRAFT_ICON = {
+    blacksmith: '<path d="M14 6l4 4M13 7l4 4-7 7-4-4zM13 7l3-3 4 4-3 3M3 21l7-7"/>',
+    tailor: '<circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><path d="M8 8l12 12M8 16L20 4"/>',
+    apothecary: '<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/>',
+    cook: '<path d="M5 3v7a2 2 0 0 0 2 2v9M7 3v7M9 3v7M16 3c-1.5 0-2.5 2-2.5 5s1 4 2.5 4v9"/>',
+    merchant: '<path d="M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18"/>',
+    jeweler: '<path d="M6 4h12l3 5-9 11L3 9z"/><path d="M3 9h18"/>',
+    trainer: '<circle cx="12" cy="6" r="2.5"/><path d="M12 9v6M8 21l4-6 4 6M6 12h12"/>'
+};
+function craftsStripHtml() {
+    let list = [];
+    try { list = window.RPG && window.RPG.crafts && typeof window.RPG.crafts.list === 'function' ? window.RPG.crafts.list() : []; } catch (e) { list = []; }
+    if (!Array.isArray(list) || !list.length) return '';
+    const chips = list.slice(0, 8).map(c => {
+        const lv = Math.max(1, Math.min(5, Number(c.level) || 1)), mx = Math.max(lv, Math.min(5, Number(c.max) || 5));
+        const pips = Array.from({ length: mx }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('');
+        return `<div class="rpg-sk-craft${c.pct ? ' has' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CRAFT_ICON[c.type] || CRAFT_ICON.merchant}</svg>
+            <span class="rpg-sk-craft-in"><span class="rpg-sk-craft-n">${escapeHtml(c.skill)} <span class="rpg-sk-craft-p" aria-label="${lv}/${mx}">${pips}</span></span><span class="rpg-sk-craft-b">${escapeHtml(c.text || '')}</span></span></div>`;
+    }).join('');
+    return `<div class="rpg-sk-crafts" title="${escapeHtml(t('sk_crafts_t'))}"><span class="rpg-sk-crafts-l">${escapeHtml(t('sk_crafts'))}</span><div class="rpg-sk-crafts-row">${chips}</div></div>`;
 }
 function treeApply() { const p = document.querySelector('#rpg-sk-win .rpg-sk-plane'); if (p) p.style.transform = `translate(${treeView.x}px,${treeView.y}px) scale(${treeView.z})`; }
 function treeFitZ() {
@@ -3577,6 +3654,7 @@ function onTreeClick(e) {
         if (myTree() && !confirm(t('sk_remake_q'))) return;
         makeTree(); return;
     }
+    if (b.dataset.grow) { growBranch(); return; }
     if (b.dataset.unchoose) { treeChoosing = false; renderTreeWin(); return; }
     if (b.dataset.suggest) { suggestClasses(); return; }
     if (b.dataset.cls !== undefined) {

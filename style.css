@@ -17,7 +17,7 @@
 }
 #rpg-vit-btn:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(201,164,74,0.55); }
 .rpg-vit-modal {
-    position: fixed; top: 52px; left: calc(50vw - 200px); width: 400px; max-width: 96%;
+    position: fixed; top: 52px; left: max(2vw, calc(50vw - 200px)); width: 400px; max-width: 96%;   /* on a phone the centre formula went off the left edge */
     z-index: 3001; display: flex; flex-direction: column; box-sizing: border-box;
     opacity: 0; pointer-events: none; transition: opacity 0.2s ease-in-out;
     background: none; border: none; border-radius: 0; box-shadow: none; color: var(--pg-ink);
@@ -221,111 +221,189 @@
 
 /* ============================================================
    THE ANGEL
-   Same paper as the rest of the extension, but the sheet has been through something:
-   scorched at the edges, stained, the typewriter ink gone brown. It uses the panel's
-   own variables and its own font, so it reads as a page from the same file rather
-   than a screen borrowed from another program.
+   A summons on vellum, in the language of the suite's letter and diary: a gilt
+   hairline frame with corner flourishes, wings drawn in ink over the title, the
+   question in Alegreya, the answers as lettered slips, a flame for each mistake
+   still forgiven. One loud thing on the sheet: the title; the next thing to press
+   is the most visible after it.
    ============================================================ */
 #rpg-angel {
-    position: fixed; inset: 0; z-index: 100000;
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--pg-type);
+    --an-paper: #f4ecd6; --an-paper2: #e7dabb; --an-edge: #d3c298; --an-gold: #b8902f; --an-gold-l: #e6cf86;
+    --an-ink: #2b2014; --an-ink2: #3a2c18; --an-soft: #64502e; --an-sepia: #6c5029;
+    --an-wine: #8a2c23; --an-wine-d: #591a15; --an-green: #3f6b2e; --an-green-d: #2f4d22;
+    /* The phone layout of the tavern puts a transform on <html>, which makes the page,
+       not the screen, the box a fixed element fills: inset: 0 came out 20px tall and the
+       card hung off the top. The screen's size is given outright instead. */
+    position: fixed; top: 0; left: 0; right: auto; bottom: auto; width: 100vw; height: 100vh; height: 100dvh; z-index: 100000;
+    display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+    font-family: 'Alegreya', Georgia, serif; color: var(--an-ink2);
 }
+#rpg-angel *, #rpg-angel *::before, #rpg-angel *::after { box-sizing: border-box; }
+/* night with a cold light falling from above: two static gradients, no blur */
 #rpg-angel .ang-dim {
     position: absolute; inset: 0;
-    background: radial-gradient(120% 90% at 50% 40%, rgba(20,10,6,.80), rgba(8,4,3,.94));
-    animation: ang-fade .5s ease both;
+    background:
+        radial-gradient(60% 55% at 50% -8%, rgba(214,200,160,.20), transparent 70%),
+        radial-gradient(130% 100% at 50% 45%, rgba(22,12,10,.86), rgba(6,3,3,.96));
+    animation: ang-fade .5s cubic-bezier(.2,.8,.3,1) both;
 }
 @keyframes ang-fade { from { opacity: 0; } to { opacity: 1; } }
 
 #rpg-angel .ang-card {
-    position: relative; width: min(560px, 92vw); max-height: 88vh; overflow-y: auto;
-    padding: 26px 30px 22px;
-    color: #4a4234;
-    /* scorched paper: the grain from the panel, a burn creeping in from the corners,
-       and an old stain low on the sheet */
+    position: relative; width: min(520px, 100%); max-height: calc(100vh - 32px); overflow-y: auto;
+    padding: 20px 28px 20px;
+    background-color: var(--an-paper);
     background-image:
-        var(--pg-noise),
-        radial-gradient(120% 70% at 8% 0%, rgba(90,44,18,.30), transparent 46%),
-        radial-gradient(110% 65% at 100% 100%, rgba(74,32,12,.34), transparent 44%),
-        radial-gradient(60% 40% at 72% 78%, rgba(120,60,26,.16), transparent 70%),
-        linear-gradient(168deg, #e8dcc0 0%, #ddcfae 55%, #cdbb95 100%);
-    background-size: 180px 180px, auto, auto, auto, auto;
-    background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat;
-    border: 1px solid #8a6a3c;
-    border-radius: 3px 5px 4px 6px;         /* a torn sheet is not a rectangle */
-    box-shadow: 0 26px 70px rgba(0,0,0,.75), 0 0 26px rgba(70,30,10,.35) inset;
-    animation: ang-rise .45s cubic-bezier(.2,.9,.3,1) both;
+        radial-gradient(120% 80% at 50% 0%, rgba(255,250,236,.75), transparent 60%),
+        radial-gradient(90% 60% at 100% 100%, rgba(122,92,48,.16), transparent 70%),
+        repeating-linear-gradient(0deg, rgba(122,92,48,.035) 0 1px, transparent 1px 3px),
+        linear-gradient(176deg, var(--an-paper) 0%, var(--an-paper2) 100%);
+    border: 1px solid var(--an-edge); border-radius: 3px;
+    box-shadow: 0 0 0 4px var(--an-paper2), 0 0 0 5px rgba(184,144,47,.55), 0 30px 80px rgba(0,0,0,.7), 0 0 40px rgba(214,200,160,.10);
+    transform: rotate(-.4deg);
+    animation: ang-rise .5s cubic-bezier(.2,1,.3,1) both;
+    scrollbar-width: thin; scrollbar-color: var(--an-wine) transparent;
 }
-@keyframes ang-rise { from { opacity: 0; transform: translateY(18px) rotate(-.4deg); } to { opacity: 1; transform: rotate(-.4deg); } }
-/* the burnt rim */
+#rpg-angel .ang-card::-webkit-scrollbar { width: 7px; }
+#rpg-angel .ang-card::-webkit-scrollbar-thumb { background: var(--an-wine); border-radius: 4px; }
+@keyframes ang-rise { from { opacity: 0; transform: translateY(16px) rotate(-.4deg) scale(.985); } to { opacity: 1; transform: rotate(-.4deg); } }
+/* the inner gilt hairline */
 #rpg-angel .ang-card::before {
-    content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
-    box-shadow: 0 0 0 1px rgba(60,26,8,.5) inset, 0 0 18px rgba(40,16,4,.55) inset;
+    content: ""; position: absolute; inset: 7px; pointer-events: none;
+    border: 1px solid rgba(184,144,47,.45); border-radius: 2px;
 }
+/* corner flourishes on the hairline */
+#rpg-angel .ang-corner { position: absolute; width: 16px; height: 16px; pointer-events: none; border: 0 solid var(--an-gold); }
+#rpg-angel .ang-corner::after { content: ""; position: absolute; width: 4px; height: 4px; background: var(--an-gold); transform: rotate(45deg); }
+#rpg-angel .ang-corner.tl { top: 4px; left: 4px; border-top-width: 1.5px; border-left-width: 1.5px; }
+#rpg-angel .ang-corner.tr { top: 4px; right: 4px; border-top-width: 1.5px; border-right-width: 1.5px; }
+#rpg-angel .ang-corner.bl { bottom: 4px; left: 4px; border-bottom-width: 1.5px; border-left-width: 1.5px; }
+#rpg-angel .ang-corner.br { bottom: 4px; right: 4px; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+#rpg-angel .ang-corner.tl::after, #rpg-angel .ang-corner.bl::after { left: -3px; }
+#rpg-angel .ang-corner.tr::after, #rpg-angel .ang-corner.br::after { right: -3px; }
+#rpg-angel .ang-corner.tl::after, #rpg-angel .ang-corner.tr::after { top: -3px; }
+#rpg-angel .ang-corner.bl::after, #rpg-angel .ang-corner.br::after { bottom: -3px; }
+
+#rpg-angel .ang-crest { display: flex; justify-content: center; color: var(--an-gold); margin: 0 0 2px; }
+#rpg-angel .ang-wings { width: 96px; height: 28px; animation: ang-glow 4.2s ease-in-out infinite; }
+@keyframes ang-glow { 0%, 100% { opacity: .78; } 50% { opacity: 1; } }
 
 #rpg-angel .ang-title {
-    font-size: 1.8rem; letter-spacing: 8px; text-align: center; font-weight: 700;
-    color: #8a2318; margin-bottom: 6px; position: relative;
+    font-weight: 800; font-size: 1.32rem; letter-spacing: 6px; text-transform: uppercase; text-align: center;
+    color: var(--an-wine); line-height: 1.15; margin: 2px 0 0; position: relative;
 }
-/* The drips are gone. Three gradient stripes never looked like blood on paper — they
-   looked like three gradient stripes. The heading carries the weight on its own: the
-   ink has bled into the fibres the way a stamp does on damp paper. */
-#rpg-angel .ang-bleed {
-    text-shadow: 0 0 1px rgba(138,35,24,.55), 0 1px 0 rgba(90,20,14,.35);
-}
-#rpg-angel .ang-bleed::after {
-    content: ""; position: absolute; left: 12%; right: 12%; top: calc(100% + 7px); height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(138,35,24,.55), transparent);
-}
-
+#rpg-angel .ang-bleed { text-shadow: 0 1px 0 rgba(255,250,236,.6); }
 #rpg-angel .ang-name {
-    text-align: center; font-size: .74rem; letter-spacing: 3px; text-transform: uppercase;
-    color: var(--pg-muted); margin: 16px 0 10px;
+    font-family: 'Caveat', cursive; font-weight: 600; font-size: 1.42rem; line-height: 1.1; text-align: center;
+    color: var(--an-soft); margin: 4px 0 8px; display: flex; align-items: center; justify-content: center; gap: 10px;
 }
-#rpg-angel .ang-speech { font-style: italic; line-height: 1.62; margin-bottom: 16px; text-align: center; color: #453d30; }
-#rpg-angel .ang-sub { text-align: center; color: var(--pg-muted); margin-top: 12px; font-style: italic; }
+#rpg-angel .ang-name::before, #rpg-angel .ang-name::after { content: ""; width: 34px; height: 1px; background: linear-gradient(90deg, transparent, var(--an-gold)); }
+#rpg-angel .ang-name::after { transform: scaleX(-1); }
+#rpg-angel .ang-title + .ang-name { margin-top: 6px; }
+#rpg-angel .ang-title:last-child, #rpg-angel .ang-title + .ang-sub { margin-bottom: 4px; }
+
+#rpg-angel .ang-speech {
+    font-style: italic; font-size: .96rem; line-height: 1.55; text-align: center; color: var(--an-ink2);
+    margin: 0 auto 14px; max-width: 44ch; text-wrap: balance;
+}
+#rpg-angel .ang-sub { text-align: center; color: var(--an-soft); margin: 12px 0 6px; font-style: italic; }
+#rpg-angel .ang-wait .ang-wings { animation-duration: 2.4s; }
 
 #rpg-angel .ang-meta {
-    display: flex; justify-content: space-between; font-size: .7rem; letter-spacing: 1px;
-    color: var(--pg-faint); margin-bottom: 8px; text-transform: uppercase;
-    border-bottom: 1px dashed var(--pg-line); padding-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-family: 'PT Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--an-sepia);
+    padding: 7px 0 8px; margin-bottom: 10px; border-top: 1px dashed rgba(122,92,48,.45); border-bottom: 1px dashed rgba(122,92,48,.45);
 }
-#rpg-angel .ang-lives.last { color: #8a2318; font-weight: 700; }
-#rpg-angel .ang-q { font-size: 1rem; line-height: 1.55; margin-bottom: 14px; color: var(--pg-ink-h); }
+#rpg-angel .ang-prog, #rpg-angel .ang-lives { display: inline-flex; align-items: center; gap: 8px; }
+#rpg-angel .ang-pips { display: inline-flex; gap: 4px; }
+#rpg-angel .ang-pips i { width: 7px; height: 7px; transform: rotate(45deg); border: 1px solid var(--an-sepia); background: transparent; }
+#rpg-angel .ang-pips i.past { background: var(--an-sepia); }
+#rpg-angel .ang-pips i.now { background: var(--an-wine); border-color: var(--an-wine); }
+#rpg-angel .ang-flames { display: inline-flex; gap: 2px; }
+#rpg-angel .ang-flame svg { width: 10px; height: 13px; display: block; fill: none; stroke: var(--an-sepia); stroke-width: 1.1; }
+#rpg-angel .ang-flame.lit svg { fill: #d9a441; stroke: #8a5a14; }
+#rpg-angel .ang-flame.lit svg .wick, #rpg-angel .ang-flame.out svg .wick { stroke: var(--an-ink2); }
+#rpg-angel .ang-flame.out svg { opacity: .55; }
+#rpg-angel .ang-lives.last { color: var(--an-wine); font-weight: 700; }
 
-#rpg-angel .ang-opts { display: flex; flex-direction: column; gap: 7px; }
-/* the same button as everywhere else in the panel, aged a little */
+#rpg-angel .ang-q { font-size: 1.05rem; font-weight: 700; line-height: 1.45; color: var(--an-ink); margin: 0 0 12px; }
+
+#rpg-angel .ang-opts { display: flex; flex-direction: column; gap: 6px; }
 #rpg-angel .ang-opt {
-    font-family: var(--pg-type); font-size: .86rem; text-align: left; padding: 9px 13px; cursor: pointer;
-    background: #efe6cf; border: 1px solid #b6a47b; border-radius: 5px;
-    color: #4a4234; transition: .15s;
+    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; cursor: pointer;
+    font-family: 'Alegreya', Georgia, serif; font-size: .95rem; line-height: 1.35; color: var(--an-ink2);
+    padding: 8px 12px 8px 8px; margin: 0;
+    background: rgba(255,251,240,.78); border: 1px solid var(--an-edge); border-radius: 3px;
+    box-shadow: 0 1px 0 rgba(122,92,48,.18);
+    transition: transform 80ms cubic-bezier(.2,.8,.3,1), border-color 80ms ease-out, background-color 80ms ease-out, box-shadow 80ms ease-out;
 }
-#rpg-angel .ang-opt:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.03); }
+#rpg-angel .ang-key {
+    flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-family: 'PT Mono', monospace; font-size: 11px; color: var(--an-sepia); border: 1px solid var(--an-sepia); background: var(--an-paper);
+    transition: background-color 80ms ease-out, color 80ms ease-out, border-color 80ms ease-out;
+}
+#rpg-angel .ang-key svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#rpg-angel .ang-otext { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+#rpg-angel .ang-opt:hover:not(:disabled), #rpg-angel .ang-opt:focus-visible:not(:disabled) {
+    transform: translateX(3px); border-color: var(--an-gold); background: #fffbf0; box-shadow: -3px 0 0 var(--an-gold), 0 1px 0 rgba(122,92,48,.18);
+}
+#rpg-angel .ang-opt:hover:not(:disabled) .ang-key, #rpg-angel .ang-opt:focus-visible:not(:disabled) .ang-key { background: var(--an-wine); border-color: var(--an-wine); color: #fff7ef; }
+#rpg-angel .ang-opt:active:not(:disabled) { transform: translateX(3px) translateY(1px); transition-duration: 60ms; }
+#rpg-angel .ang-opt:focus-visible { outline: none; }
 #rpg-angel .ang-opt:disabled { cursor: default; }
-#rpg-angel .ang-opt.right { background: var(--pg-green); border-color: #5b7d44; color: #fff; }
-#rpg-angel .ang-opt.wrong { background: #ecd6d2; border-color: #c08a82; color: #7a2f26; }
+#rpg-angel .ang-opt.right { background: #e9efdb; border-color: #9fb582; color: var(--an-green-d); box-shadow: -3px 0 0 var(--an-green); }
+#rpg-angel .ang-opt.right .ang-key { background: var(--an-green); border-color: var(--an-green); color: #fff; }
+#rpg-angel .ang-opt.wrong { background: #f5e2dc; border-color: #d4a299; color: #6f1d16; box-shadow: -3px 0 0 var(--an-wine); }
+#rpg-angel .ang-opt.wrong .ang-otext { text-decoration: line-through; text-decoration-color: rgba(138,44,35,.55); text-decoration-thickness: 1px; }
+#rpg-angel .ang-opt.wrong .ang-key { background: var(--an-wine); border-color: var(--an-wine); color: #fff; }
+#rpg-angel .ang-opt.rest { color: var(--an-soft); background: rgba(255,251,240,.45); }
+#rpg-angel .ang-opt.right, #rpg-angel .ang-opt.wrong { animation: ang-mark .26s cubic-bezier(.2,1,.3,1); }
+@keyframes ang-mark { from { transform: translateX(6px); } to { transform: none; } }
 
-#rpg-angel .ang-note { font-size: .8rem; line-height: 1.5; color: var(--pg-muted); margin-top: 12px; font-style: italic; }
-#rpg-angel .ang-note.ok { color: #4f6b3c; }
-#rpg-angel .ang-note.bad { color: #8f4033; }
-#rpg-angel .ang-verdict { text-align: center; font-size: 1.02rem; color: #4f6b3c; margin: 14px 0 4px; }
-
-#rpg-angel .ang-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-/* Copied from .rpg-vit-btn in the panel above, values and all, so the angel's buttons
-   are the panel's buttons rather than something that merely resembles them. */
-#rpg-angel .ang-btn {
-    font-family: var(--pg-type); font-size: .8rem; padding: 6px 14px; border-radius: 5px;
-    cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
-    transition: .15s; border: 1px solid #b6a47b; background: #efe6cf; color: #4a4234;
+#rpg-angel .ang-note {
+    font-style: italic; font-size: .88rem; line-height: 1.45; color: var(--an-soft);
+    margin: 10px 0 0; padding: 2px 0 2px 10px; border-left: 2px solid rgba(122,92,48,.5);
 }
-#rpg-angel .ang-btn:hover { transform: translateY(-1px); filter: brightness(1.03); }
-#rpg-angel .ang-btn.ok { background: var(--pg-green); border-color: #5b7d44; color: #fff; }
-#rpg-angel .ang-btn.danger { background: #ecd6d2; border-color: #c08a82; color: #7a2f26; }
-/* spared: the scorching lifts a little */
-#rpg-angel .ang-card.ang-good {
-    border-color: #7d8f5e;
-    box-shadow: 0 26px 70px rgba(0,0,0,.7), 0 0 26px rgba(111,147,85,.22) inset;
+#rpg-angel .ang-note.ok { color: var(--an-green-d); border-left-color: var(--an-green); }
+#rpg-angel .ang-note.bad { color: #6f1d16; border-left-color: var(--an-wine); }
+#rpg-angel .ang-lost .ang-note { border-left: none; padding-left: 0; text-align: center; font-size: .82rem; }
+#rpg-angel .ang-verdict {
+    text-align: center; font-weight: 800; font-size: .95rem; letter-spacing: 3px; text-transform: uppercase; color: var(--an-green-d);
+    margin: 4px 0 2px;
+}
+
+#rpg-angel .ang-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
+#rpg-angel .ang-good .ang-actions, #rpg-angel .ang-lost .ang-actions { justify-content: center; }
+/* the letter's pressed buttons: a lip below that the press sinks into */
+#rpg-angel .ang-btn {
+    display: inline-flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap;
+    font-family: 'Alegreya', Georgia, serif; font-weight: 700; font-size: .92rem; letter-spacing: .3px;
+    padding: 8px 16px 7px; border-radius: 3px; border: 1px solid #c9b78a;
+    background: linear-gradient(180deg, #fbf5e6, #efe4c8); color: var(--an-ink2); box-shadow: 0 3px 0 #c9b78a;
+    transition: transform 80ms cubic-bezier(.2,.8,.3,1), box-shadow 80ms ease-out, filter 80ms ease-out;
+}
+#rpg-angel .ang-btn i { font-size: .82em; }
+#rpg-angel .ang-btn:hover { filter: brightness(1.05); }
+#rpg-angel .ang-btn:active { transform: translateY(3px); box-shadow: 0 0 0 transparent; transition-duration: 60ms; }
+#rpg-angel .ang-btn:focus-visible { outline: 2px solid var(--an-gold); outline-offset: 3px; }
+#rpg-angel .ang-btn.ok { background: linear-gradient(180deg, #9a352a, var(--an-wine)); border-color: var(--an-wine-d); color: #fff7ef; box-shadow: 0 3px 0 var(--an-wine-d); }
+#rpg-angel .ang-good .ang-btn.ok { background: linear-gradient(180deg, #4b7a37, var(--an-green)); border-color: var(--an-green-d); box-shadow: 0 3px 0 #22391a; }
+#rpg-angel .ang-btn.danger { background: linear-gradient(180deg, #9a352a, var(--an-wine)); border-color: var(--an-wine-d); color: #fff7ef; box-shadow: 0 3px 0 var(--an-wine-d); }
+#rpg-angel .ang-btn.ghost { background: transparent; border: 1px dashed var(--an-sepia); color: var(--an-ink2); box-shadow: none; }
+#rpg-angel .ang-btn.ghost:active { transform: translateY(1px); }
+
+/* spared: the sheet warms, the gilt glows */
+#rpg-angel .ang-card.ang-good { box-shadow: 0 0 0 4px var(--an-paper2), 0 0 0 5px rgba(184,144,47,.8), 0 30px 80px rgba(0,0,0,.65), 0 0 60px rgba(230,207,134,.28); }
+#rpg-angel .ang-card.ang-good .ang-crest { color: #a07c22; }
+#rpg-angel .ang-card.ang-lost .ang-crest { color: var(--an-sepia); }
+#rpg-angel .ang-card.ang-lost .ang-wings { animation: none; opacity: .7; }
+
+@media (max-width: 480px) {
+    #rpg-angel { padding: 10px; }
+    #rpg-angel .ang-card { padding: 18px 18px 16px; }
+    #rpg-angel .ang-title { font-size: 1.12rem; letter-spacing: 4px; }
+    #rpg-angel .ang-meta { letter-spacing: 1px; }
+    #rpg-angel .ang-actions .ang-btn { flex: 1 1 auto; justify-content: center; }
 }
 
 /* A redraw, not a first appearance: the card is rebuilt on every answer and its
@@ -334,7 +412,9 @@
 #rpg-angel.ang-quiet .ang-card { animation: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
-    #rpg-angel .ang-dim, #rpg-angel .ang-card { animation: none; }
+    #rpg-angel .ang-dim, #rpg-angel .ang-card, #rpg-angel .ang-wings, #rpg-angel .ang-opt { animation: none !important; }
+    #rpg-angel .ang-opt, #rpg-angel .ang-btn, #rpg-angel .ang-key { transition: none; }
+    #rpg-angel .ang-opt:hover:not(:disabled) { transform: none; }
 }
 
 /* ---------- settings: frames with an emoji each, as RPG Map / Character Lens ---------- */
@@ -494,6 +574,11 @@
 .rpg-sk-main { padding:6px 14px; border-radius:6px; border:1px solid #591a15; background: linear-gradient(180deg, #a83a2e, #7e2a20); color:#fbf6e8; font: 700 .84rem 'Alegreya', Georgia, serif; cursor:pointer; box-shadow:0 3px 0 #4a140f; }
 .rpg-sk-main:active { transform: translateY(3px); box-shadow:none; }
 .rpg-sk-main:disabled { opacity:.6; cursor:progress; }
+.rpg-sk-grow { font: 700 .82rem 'Alegreya', Georgia, serif; padding: 4px 11px; border-radius: 5px; border: 1px solid rgba(0,0,0,.3); cursor: pointer; color: #fdf2e6; background: linear-gradient(180deg, #a3342a, #7e2219); box-shadow: 0 2px 0 #561510; transition: transform 60ms ease-out, box-shadow 60ms ease-out, filter 80ms ease-out; }
+.rpg-sk-grow:hover { filter: brightness(1.08); }
+.rpg-sk-grow:active { transform: translateY(2px); box-shadow: 0 0 0 #561510; }
+.rpg-sk-grow:disabled { opacity: .6; cursor: default; }
+.rpg-sk-grow:focus-visible { outline: 2px solid #e6cf86; outline-offset: 2px; }
 .rpg-sk-ghost { padding:6px 10px; border-radius:6px; border:1px dashed #8a6c3c; background:transparent; color:#3a2c18; font: 600 .82rem 'Alegreya', Georgia, serif; cursor:pointer; }
 .rpg-sk-ghost:disabled { opacity:.45; cursor:default; }
 .rpg-sk-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 12px; border-top:1px solid rgba(201,164,74,.3); font: 400 11px 'PT Mono', monospace; color:#e6cf86; flex-wrap:wrap; }
@@ -615,3 +700,17 @@
 
 /* the tiles come in one by one only right after the classes arrive, never on a redraw */
 .rpg-sk-class:not(.fresh) .rpg-sk-cls { animation: none; opacity: 1; transform: none; }
+
+/* ---------- crafts beside the tree (from RPG Vendors) ---------- */
+.rpg-sk-crafts { display:flex; align-items:center; gap:10px; padding:6px 12px; border-top:1px solid rgba(201,164,74,.22); }
+.rpg-sk-crafts-l { font: 400 10px 'PT Mono', monospace; letter-spacing:2px; text-transform:uppercase; color:#e6cf86; flex:0 0 auto; }
+.rpg-sk-crafts-row { display:flex; gap:6px; overflow-x:auto; scrollbar-width:thin; scrollbar-color:#8a6e32 transparent; padding-bottom:2px; }
+.rpg-sk-craft { display:flex; align-items:center; gap:7px; flex:0 0 auto; padding:4px 10px 4px 7px; border:1px solid rgba(230,207,134,.32); border-radius:4px; background:rgba(255,248,230,.04); }
+.rpg-sk-craft.has { border-color:rgba(230,207,134,.6); background:rgba(230,207,134,.08); }
+.rpg-sk-craft svg { width:17px; height:17px; color:#e6cf86; flex:0 0 auto; }
+.rpg-sk-craft-in { display:flex; flex-direction:column; gap:1px; min-width:0; }
+.rpg-sk-craft-n { font: 600 .78rem 'Alegreya', Georgia, serif; color:#f3e6c4; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+.rpg-sk-craft-p { display:inline-flex; gap:2px; }
+.rpg-sk-craft-p i { width:5px; height:5px; transform:rotate(45deg); border:1px solid #c9a44a; }
+.rpg-sk-craft-p i.on { background:#e6cf86; border-color:#e6cf86; }
+.rpg-sk-craft-b { font: 400 10px 'PT Mono', monospace; color:#e6cf86; white-space:nowrap; letter-spacing:.3px; }
