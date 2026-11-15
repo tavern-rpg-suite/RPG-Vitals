@@ -1,5 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Special+Elite&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,500;0,700;0,800;1,500&family=Caveat:wght@600&family=PT+Mono&display=swap');
+/* fonts: kept in the extension's own folder (fonts/, licences there) — nothing is loaded from the internet */
+@font-face { font-family: 'Special Elite'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/special-elite-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/alegreya-cyrillic-400-normal.woff2') format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/alegreya-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 500; font-display: swap; src: url('fonts/alegreya-cyrillic-500-normal.woff2') format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 500; font-display: swap; src: url('fonts/alegreya-latin-500-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/alegreya-cyrillic-700-normal.woff2') format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/alegreya-latin-700-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 800; font-display: swap; src: url('fonts/alegreya-cyrillic-800-normal.woff2') format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 800; font-display: swap; src: url('fonts/alegreya-latin-800-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 500; font-display: swap; src: url('fonts/alegreya-cyrillic-500-italic.woff2') format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 500; font-display: swap; src: url('fonts/alegreya-latin-500-italic.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Caveat'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/caveat-cyrillic-600-normal.woff2') format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Caveat'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/caveat-latin-600-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'PT Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/pt-mono-cyrillic-400-normal.woff2') format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'PT Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/pt-mono-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
 /* RPG VITALS — HP & effects, living-paper palette */
 :root {
     --pg-bg1:#f7f1e3; --pg-bg2:#efe4cd; --pg-card:#fffaf0;
@@ -194,7 +208,16 @@
 #rpg-vit-body .vex-section { font-family:"PT Mono",monospace; font-size:9px; letter-spacing:2px; color:var(--sepia);
     border-top:1px dashed var(--edge); margin-top:16px; padding-top:11px; position:relative; z-index:2; }
 #rpg-vit-body .vex-enemy { padding:8px 10px; margin-top:8px; background:#fbf5e4; border:1px solid var(--edge); border-left:4px solid var(--oxblood); border-radius:6px; }
-#rpg-vit-body .vex-enemy .rpg-vit-bar-wrap { margin:5px 0 7px; height:14px; }
+/* a foe in the window's own hand: the name in the text face, the numbers small in mono, a thin bar
+   (it was in the chat's large type, with a thick red stripe) */
+#rpg-vit-body .vex-enemy .rpg-vit-hp-top { gap:8px; align-items:baseline; margin-bottom:5px; }
+#rpg-vit-body .vex-enemy .rpg-vit-b-name { min-width:0; overflow-wrap:anywhere; line-height:1.2; font-family:"Alegreya",Georgia,serif; font-weight:700; font-size:14px; color:var(--ink); }
+#rpg-vit-body .vex-enemy .rpg-vit-hp-num { flex:none; display:flex; align-items:center; white-space:nowrap; font-family:"PT Mono",monospace; font-size:11px; letter-spacing:.5px; color:var(--ink-soft); }
+#rpg-vit-body .vex-enemy .rpg-vit-e-del { font-size:11px; padding:4px; margin:-4px -4px -4px 4px !important; border-radius:50%; transition:color .08s ease-out, background-color .08s ease-out; }
+#rpg-vit-body .vex-enemy .rpg-vit-e-del:hover { color:var(--oxblood) !important; background:rgba(138,44,35,.08); }
+#rpg-vit-body .vex-enemy .rpg-vit-bar-wrap { margin:0 0 2px; height:9px; border-radius:5px; background:#e3d8bd; border:1px solid var(--edge); }
+#rpg-vit-body .vex-enemy .rpg-vit-bar { border-radius:4px; background:linear-gradient(180deg,#b5483a,var(--oxblood)) !important; }
+#rpg-vit-body .vex-enemy .vex-ctrl { margin-top:8px; }
 #rpg-vit-body .vex-add { margin-top:10px; display:flex; flex-direction:column; gap:7px; position:relative; z-index:2; }
 #rpg-vit-body .vex-add .text_pole { width:100%; background:#fcfbf2; border:1px solid var(--edge); border-radius:6px; color:var(--ink-soft); }
 #rpg-vit-body .vex-add-row { display:flex; gap:7px; align-items:center; flex-wrap:wrap; }

@@ -2650,9 +2650,14 @@ function skRepairJson(src) {
                 const j = nextSolid(k + 1), d = t0[j];
                 // a real closing quote is followed by , : } ] or the end; a quote then a new line then "..." is a missing comma
                 const after = d === ',' || d === ':' ? t0[nextSolid(j + 1)] : '';
+                // a text that is the value of a name in an object is followed by the next name ("cost": …) or the
+                // end of the object: "names it "the Ledger", "the Debt", and it obeys" stays one text
+                const inObjVal = !isKey && stack[stack.length - 1] === '{';
+                const keyNext = () => /^\s*(["'][^"'\n]{1,40}["']|["']?[A-Za-z_]\w{0,40})\s*:/.test(t0.slice(j + 1, j + 60)) || /^\s*[}\]]/.test(t0.slice(j + 1, j + 8));
+                const lit = /^(true|false|null)(?![\w])/.test(t0.slice(nextSolid(j + 1), nextSolid(j + 1) + 6));
                 const ends = j >= t0.length || '}]'.includes(d)
-                    || (d === ',' && (after === undefined || '"\'{[}]/'.includes(after)))           // "...", "next"  — not  "a "ghost", it walks"
-                    || (d === ':' && (after === undefined || /["'{\[\d\-tfn]/.test(after)))
+                    || (d === ',' && (inObjVal ? keyNext() : (after === undefined || '"\'{[}]/'.includes(after))))   // "...", "next"  — not  "a "ghost", it walks"
+                    || (d === ':' && !inObjVal && (after === undefined || /["'{\[\d\-]/.test(after) || lit))   // a name ends at its colon; a value never does ("Her rule: "Pay first": then…")
                     || (d === '"' && /[\r\n]/.test(t0.slice(k + 1, j)));
                 if (ends) { inS = false; out += '"'; }
                 else out += q === '"' ? '\\"' : "'";
@@ -2662,6 +2667,11 @@ function skRepairJson(src) {
             if (c === '\r') continue;
             if (c === '\t') { out += ' '; continue; }
             out += c; continue;
+        }
+        // a name without quotes ({name: "x", cost: {...}}) gets them
+        if (/[A-Za-z_]/.test(c) && stack[stack.length - 1] === '{' && /[{,]$/.test(out.replace(/\s+$/, ''))) {
+            const m = /^[A-Za-z_]\w{0,40}/.exec(t0.slice(k, k + 42));
+            if (m && t0[nextSolid(k + m[0].length)] === ':') { out += '"' + m[0] + '"'; k += m[0].length - 1; continue; }
         }
         if (c === '/' && t0[k + 1] === '/') { while (k < t0.length && t0[k] !== '\n') k++; out += '\n'; continue; }
         if (c === '/' && t0[k + 1] === '*') { const e = t0.indexOf('*/', k + 2); k = e < 0 ? t0.length : e + 1; continue; }
@@ -2684,7 +2694,10 @@ function skRepairJson(src) {
     return out;
 }
 function skLooseJson(text) {
-    let t0 = skRepairJson(String(text || '').replace(/^\s*```(?:json)?\s*/i, '').replace(/```\s*$/, ''));
+    let src = String(text || '').replace(/^\s*```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    const open = src.search(/[{[]/);
+    if (open > 0) src = src.slice(open);
+    let t0 = skRepairJson(src);
     const i = t0.indexOf('{');
     if (i < 0) return null;
     let depth = 0, inS = false, esc = false, end = -1;
@@ -2738,7 +2751,8 @@ function skPersonaKey() {
 }
 function normalizeSkill(x, bi, ti, si) {
     if (!x || typeof x !== 'object') return null;
-    const name = skText(x.name, 60);
+    if (!x.name && x.skill && typeof x.skill === 'object' && !Array.isArray(x.skill)) x = x.skill;   // {"skill": {...}}
+    const name = skText(x.name, 60) || skText(x.title, 60) || skText(x.skill, 60) || skText(x.label, 60);
     if (!name) return null;
     const c = x.cost && typeof x.cost === 'object' ? x.cost : {};
     const e = x.effect && typeof x.effect === 'object' ? x.effect : {};
@@ -2768,7 +2782,7 @@ function skTierPair(tier) {
     if (Array.isArray(tier.skills)) return tier.skills;
     if (Array.isArray(tier.options)) return tier.options;
     if (Array.isArray(tier.choices)) return tier.choices;
-    const vals = Object.values(tier).filter(x => x && typeof x === 'object' && !Array.isArray(x) && x.name);
+    const vals = Object.values(tier).filter(x => x && typeof x === 'object' && !Array.isArray(x) && (x.name || x.title || (x.skill && typeof x.skill === 'object')));
     return vals;
 }
 // why the model stopped, in words the player can act on
@@ -3184,7 +3198,7 @@ async function makeTree() {
                 if (!raw) break;
             }
             tree = normalizeTree(raw, n);
-            if (!tree) { why = (o.raw ? t('sk_fail_shape') : t('sk_fail_empty')) + skStopWhy(o); console.warn('[RPG Vitals] the tree answer could not be read:', { finish: o.finish, usage: o.usage, answer: String(o.raw || '').slice(0, 3000) }); }
+            if (!tree) { why = (o.raw ? t('sk_fail_shape') : t('sk_fail_empty')) + skStopWhy(o); console.warn('[RPG Vitals] the tree answer could not be read:', { finish: o.finish, usage: o.usage, answer: String(o.raw || '').slice(0, 20000) }); }
             else if (!full(tree)) {
                 // the model stopped before the tree was whole: asked once more, the fuller one is kept
                 console.warn('[RPG Vitals] the tree came back unfinished:', { skills: count(tree), of: n * 6, finish: o.finish, usage: o.usage, answer: String(o.raw || '').slice(0, 12000) });
