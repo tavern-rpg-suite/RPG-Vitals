@@ -3,6 +3,7 @@ import { eventSource, event_types, saveChatDebounced, saveSettingsDebounced, set
 import { user_avatar } from '../../../personas.js';
 import { power_user } from '../../../power-user.js';
 import { selected_world_info } from '../../../world-info.js';
+import './suite-core.js';   // the suite's shared core: one seal for the floating buttons, the request queue, one "when and where"
 
 const MODULE_NAME = 'rpg_vitals';
 const PROMPT_KEY = 'rpg_vitals_injection';
